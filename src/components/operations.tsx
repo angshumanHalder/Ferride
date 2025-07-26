@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, confirm } from "@tauri-apps/plugin-dialog";
 
 export async function handleOpenFile() {
   const filePath = await open({ multiple: false });
@@ -17,8 +17,13 @@ export async function handleOpenFile() {
 
 export async function handleNewFile(isDirty: boolean) {
   if (isDirty) {
-    const confirmDiscarded = window.confirm("There are unsaved changes. Do you want to proceed?");
-    if (!confirmDiscarded) return;
+    const shouldProceed = await confirm(
+      "There are unsaved changes. Do you want to proceed?",
+      { title: "Ferride", kind: "warning" }
+    );
+    if (!shouldProceed) return false;
     await invoke("new_file");
+    return true;
   }
+  return true;
 }

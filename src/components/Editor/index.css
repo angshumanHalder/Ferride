@@ -3,6 +3,7 @@
   outline: 1px solid #ccc;
   min-height: 200px;
   padding: 8px;
+  color: #ccc;
 }
 
 .editor-line {
@@ -11,15 +12,15 @@
 
 .cursor {
   display: inline-block;
-  width: 8px;
+  width: 2px;
   background: #fff;
   height: 1rem;
   vertical-align: middle;
-  animation: blinker ls steps(1) infinite;
+  animation: blinker ls step-start infinite;
 }
 
 @keyframes blinker {
-  to {
+  50% {
     opacity: 0;
   }
 }
