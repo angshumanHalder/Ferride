@@ -1,38 +1,18 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod commands;
 mod editor;
 
 use editor::EditorState;
-use ropey::Rope;
 use tauri::{
     menu::{MenuBuilder, MenuItem, SubmenuBuilder},
     Emitter,
 };
 
-#[tauri::command]
-fn open_file(path: String, state: tauri::State<EditorState>) -> Result<String, String> {
-    let rope = Rope::from_reader(std::fs::File::open(path).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    *state.document.lock().unwrap() = rope.clone();
-    Ok(rope.to_string())
-}
-
-#[tauri::command]
-fn save_file(
-    path: String,
-    content: String,
-    state: tauri::State<EditorState>,
-) -> Result<(), String> {
-    let rope = Rope::from_str(&content);
-    rope.write_to(std::fs::File::create(path).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    *state.document.lock().unwrap() = rope;
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = EditorState::default();
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let new_file_item = MenuItem::with_id(app, "new_file", "New File", true, None::<&str>)?;
             let save_as_item = MenuItem::with_id(app, "save_as", "Save As...", true, None::<&str>)?;
@@ -103,7 +83,11 @@ pub fn run() {
         })
         .manage(state)
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![open_file, save_file])
+        .invoke_handler(tauri::generate_handler![
+            commands::new_file,
+            commands::open_file,
+            commands::save_file
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

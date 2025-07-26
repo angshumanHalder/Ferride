@@ -1,0 +1,25 @@
+.editor-container {
+  font-family: monospace;
+  outline: 1px solid #ccc;
+  min-height: 200px;
+  padding: 8px;
+}
+
+.editor-line {
+  min-height: 1.2rem;
+}
+
+.cursor {
+  display: inline-block;
+  width: 8px;
+  background: #fff;
+  height: 1rem;
+  vertical-align: middle;
+  animation: blinker ls steps(1) infinite;
+}
+
+@keyframes blinker {
+  to {
+    opacity: 0;
+  }
+}
