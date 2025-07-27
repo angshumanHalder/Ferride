@@ -5,14 +5,14 @@ export async function handleOpenFile() {
   const filePath = await open({ multiple: false });
   if (typeof filePath === "string") {
     try {
-      const content = await invoke<string[]>("open_file", { path: filePath });
+      const content = await invoke<LineInfo[]>("open_file", { path: filePath });
       return content;
     } catch (e) {
       console.error("Failed to open file: ", e);
-      return [];
+      return null;
     }
   }
-  return [];
+  return null;
 }
 
 export async function handleNewFile(isDirty: boolean) {

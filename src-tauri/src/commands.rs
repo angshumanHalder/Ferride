@@ -1,9 +1,12 @@
-use crate::{editor::EditAction, EditorState};
+use crate::{
+    editor::{EditAction, EditResult, LineInfo},
+    EditorState,
+};
 use ropey::Rope;
-use std::fs::File;
+use std::{fs::File, mem};
 
 #[tauri::command]
-pub fn new_file(state: tauri::State<EditorState>) -> Result<(), String> {
+pub fn new_file(state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, String> {
     let mut doc = state.document.lock().unwrap();
     let mut undo_stack = state.undo_stack.lock().unwrap();
     let mut redo_stack = state.redo_stack.lock().unwrap();
@@ -12,74 +15,66 @@ pub fn new_file(state: tauri::State<EditorState>) -> Result<(), String> {
     undo_stack.clear();
     redo_stack.clear();
 
-    Ok(())
+    mem::drop(doc);
+
+    Ok(state.get_rendered_text())
 }
 
 #[tauri::command]
-pub fn open_file(path: String, state: tauri::State<EditorState>) -> Result<Vec<String>, String> {
+pub fn open_file(path: String, state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, String> {
     let file = File::open(&path).map_err(|e| e.to_string())?;
     let rope = Rope::from_reader(file).map_err(|e| e.to_string())?;
-    *state.document.lock().unwrap() = rope.clone();
+    *state.document.lock().unwrap() = rope;
 
-    let lines: Vec<String> = rope.lines().map(|line| line.to_string()).collect();
-
-    Ok(lines)
+    Ok(state.get_rendered_text())
 }
 
 #[tauri::command]
-pub fn save_file(
-    path: String,
-    content: String,
-    state: tauri::State<EditorState>,
-) -> Result<(), String> {
-    let rope = Rope::from_str(&content);
-    rope.write_to(std::fs::File::create(path).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    *state.document.lock().unwrap() = rope;
+pub fn save_file(path: String, state: tauri::State<EditorState>) -> Result<(), String> {
+    let doc = state.document.lock().unwrap();
+    let file = File::create(path).map_err(|e| e.to_string())?;
+    doc.write_to(file).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_document_lines(state: tauri::State<EditorState>) -> Result<Vec<String>, String> {
-    let doc = state.document.lock().map_err(|e| e.to_string())?;
-    Ok(doc.lines().map(|line| line.to_string()).collect())
+pub fn get_rendered_text(state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, String> {
+    Ok(state.get_rendered_text())
 }
 
 #[tauri::command]
-pub fn insert_newline(
-    line: usize,
-    col: usize,
-    state: tauri::State<EditorState>,
-) -> Result<(), String> {
+pub fn insert_newline(pos: usize, state: tauri::State<EditorState>) -> Result<EditResult, String> {
     let mut doc = state.document.lock().unwrap();
     let mut undo_stack = state.undo_stack.lock().unwrap();
-    let mut redo_stack = state.redo_stack.lock().unwrap();
-
-    let pos = doc.line_to_char(line) + col;
 
     doc.insert_char(pos, '\n');
+
+    let new_cursor_pos = pos + 1;
 
     undo_stack.push(EditAction::Delete {
         pos,
         text: "\n".to_string(),
     });
 
-    redo_stack.clear();
+    state.redo_stack.lock().unwrap().clear();
 
-    Ok(())
+    mem::drop(doc);
+
+    Ok(EditResult {
+        lines: state.get_rendered_text(),
+        cursor_pos: new_cursor_pos,
+    })
 }
 
 #[tauri::command]
 pub fn insert_char(
-    line: usize,
-    col: usize,
+    pos: usize,
     ch: char,
     state: tauri::State<EditorState>,
-) -> Result<(), String> {
+) -> Result<EditResult, String> {
     let mut doc = state.document.lock().unwrap();
-    let pos = doc.line_to_char(line) + col;
-
     doc.insert_char(pos, ch);
+    let new_cursor_pos = pos + 1;
 
     let mut undo_stack = state.undo_stack.lock().unwrap();
     undo_stack.push(EditAction::Delete {
@@ -88,50 +83,50 @@ pub fn insert_char(
     });
 
     state.redo_stack.lock().unwrap().clear();
+    mem::drop(doc);
 
-    Ok(())
+    Ok(EditResult {
+        lines: state.get_rendered_text(),
+        cursor_pos: new_cursor_pos,
+    })
 }
 
 #[tauri::command]
-pub fn delete_char(
-    line: usize,
-    col: usize,
-    state: tauri::State<EditorState>,
-) -> Result<(), String> {
-    let mut doc = state.document.lock().unwrap();
-
-    let max_line = doc.len_lines().saturating_sub(1);
-    let clamped_line = if line > max_line { max_line } else { line };
-
-    let line_len = doc.line(clamped_line).len_chars();
-    let clamped_col = if col >= line_len {
-        line_len.saturating_sub(1)
-    } else {
-        col
-    };
-
-    let pos = doc.line_to_char(clamped_line) + clamped_col;
-
-    if pos >= doc.len_chars() {
-        return Err(format!(
-            "Position out of bounds: pos {pos}, doc length {}",
-            doc.len_chars()
-        ));
+pub fn delete_char(pos: usize, state: tauri::State<EditorState>) -> Result<EditResult, String> {
+    if pos == 0 {
+        return Ok(EditResult {
+            lines: state.get_rendered_text(),
+            cursor_pos: pos,
+        });
     }
 
-    let deleted_char = doc.char(pos).to_string();
+    let mut doc = state.document.lock().unwrap();
 
-    doc.remove(pos..pos + 1);
+    let delete_pos = pos.saturating_sub(1);
+
+    if delete_pos >= doc.len_chars() {
+        return Ok(EditResult {
+            lines: state.get_rendered_text(),
+            cursor_pos: doc.len_chars(),
+        });
+    }
+
+    let deleted_text = doc.slice(delete_pos..pos).to_string();
+    doc.remove(delete_pos..pos);
 
     let mut undo_stack = state.undo_stack.lock().unwrap();
     undo_stack.push(EditAction::Insert {
-        pos,
-        text: deleted_char,
+        pos: delete_pos,
+        text: deleted_text,
     });
-
     state.redo_stack.lock().unwrap().clear();
 
-    Ok(())
+    mem::drop(doc);
+
+    Ok(EditResult {
+        lines: state.get_rendered_text(),
+        cursor_pos: delete_pos,
+    })
 }
 
 #[tauri::command]
@@ -141,19 +136,18 @@ pub fn undo(state: tauri::State<EditorState>) -> Result<(), String> {
         let mut doc = state.document.lock().unwrap();
         let mut redo_stack = state.redo_stack.lock().unwrap();
 
-        match &action {
+        match action {
             EditAction::Insert { pos, text } => {
-                doc.insert(*pos, text);
-                redo_stack.push(EditAction::Delete {
-                    pos: *pos,
-                    text: text.clone(),
-                });
+                doc.insert(pos, &text);
+                redo_stack.push(EditAction::Delete { pos, text });
             }
             EditAction::Delete { pos, text } => {
-                doc.remove(*pos..*pos + text.len());
+                let end = pos + text.chars().count();
+                let deleted_text = doc.slice(pos..end).to_string();
+                doc.remove(pos..end);
                 redo_stack.push(EditAction::Insert {
-                    pos: *pos,
-                    text: text.clone(),
+                    pos,
+                    text: deleted_text,
                 });
             }
         }
@@ -164,30 +158,23 @@ pub fn undo(state: tauri::State<EditorState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn redo(state: tauri::State<EditorState>) -> Result<(), String> {
+pub fn redo(state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, String> {
     let mut redo_stack = state.redo_stack.lock().unwrap();
     if let Some(action) = redo_stack.pop() {
         let mut doc = state.document.lock().unwrap();
         let mut undo_stack = state.undo_stack.lock().unwrap();
 
-        match &action {
+        match action {
             EditAction::Insert { pos, text } => {
-                doc.insert(*pos, text);
-                undo_stack.push(EditAction::Delete {
-                    pos: *pos,
-                    text: text.clone(),
-                });
+                doc.insert(pos, &text);
+                undo_stack.push(EditAction::Delete { pos, text });
             }
             EditAction::Delete { pos, text } => {
-                doc.remove(*pos..*pos + text.len());
-                undo_stack.push(EditAction::Delete {
-                    pos: *pos,
-                    text: text.clone(),
-                });
+                let end = pos + text.chars().count();
+                doc.remove(pos..end);
+                undo_stack.push(EditAction::Insert { pos, text });
             }
         }
-        Ok(())
-    } else {
-        Err("No actions to redo".into())
     }
+    Ok(state.get_rendered_text())
 }

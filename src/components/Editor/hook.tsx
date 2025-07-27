@@ -1,142 +1,162 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import { handleNewFile, handleOpenFile } from "../operations";
-import { clampCursorPosition } from "../utils";
-
+import { buildVisualMap, calculateVisualWidth, translateLogicalToVisual, translateVisualToLogical } from "../utils";
 
 export function useEditorHook() {
-  const [lines, setLines] = useState<string[]>([]);
-  const [cursor, setCursor] = useState<Cursor>({ line: 0, col: 0 });
+  // STATES
+  const [logicalLines, setLogicalLines] = useState<LineInfo[]>([]);
+  const [visualMap, setVisualMap] = useState<VisualLine[]>([]);
+  const [cursor, setCursor] = useState<Cursor>({ visualLine: 0, desiredCol: 0 });
   const [isDirty, setDirty] = useState(false);
+  const [editorWidth, setEditorWidth] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    containerRef.current?.focus();
-    refreshLines();
-  }, []);
-
+  // CORE LOGIC
 
   useEffect(() => {
+    if (logicalLines.length > 0 && editorWidth > 0) {
+      const editorFont = containerRef.current
+        ? window.getComputedStyle(containerRef.current).font
+        : '16px monospace';
+
+      const newMap = buildVisualMap(logicalLines, editorWidth, editorFont);
+      setVisualMap(newMap);
+    }
+  }, [logicalLines, editorWidth]);
+
+  useEffect(() => {
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries[0]) setEditorWidth(entries[0].contentRect.width);
+    });
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    invoke<LineInfo[]>("get_rendered_text").then(setLogicalLines);
+
     const unlisten = listen("menu-event", (event) => {
       switch (event.payload) {
         case "open-file":
           handleOpenFile().then((content) => {
-            setLines(content);
+            if (content) setLogicalLines(content);
           });
           break;
         case "new-file":
           handleNewFile(isDirty).then((clearState) => {
             if (clearState) {
-              setLines([]);
-              setCursor({ line: 0, col: 0 });
+              const editorFont = containerRef.current
+                ? window.getComputedStyle(containerRef.current).font
+                : '16px monospace';
+              setLogicalLines([]);
+              const newMap = buildVisualMap([], editorWidth, editorFont);
+              setVisualMap(newMap);
+              setCursor({ visualLine: 0, desiredCol: 0 });
               setDirty(false);
             }
           });
       }
     })
-
     return () => {
+      resizeObserver.disconnect();
       unlisten.then((f) => f());
     };
   }, [isDirty]);
 
-  const refreshLines = async () => {
-    const updatedLines = await invoke<string[]>("get_document_lines");
-    setLines(updatedLines);
-    setCursor((cur) => clampCursorPosition(cur.line, cur.col + 1, updatedLines));
-  }
-
-  const setClampedCursor = (line: number, col: number) => {
-    const clamped = clampCursorPosition(line, col, lines);
-    setCursor(clamped);
-  }
-
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const clampedCursor = clampCursorPosition(cursor.line, cursor.col, lines);
+    const idEdit = e.key.length === 1 || e.key === "Enter" || e.key === "Backspace" || e.key === "Tab";
 
+    if (idEdit) {
+      let charIdx = translateVisualToLogical(cursor, visualMap, logicalLines);
+      let command: string;
+      let payload: InvokeArgs;
 
-    if (e.key.length == 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      // Handle Insert printable character
-      const { line, col } = cursor;
-      await invoke("insert_char", { line, col, ch: e.key });
-      await refreshLines();
-      setDirty(true);
-    }
-    // Handle Insert newline character
-    else if (e.key === "Enter") {
-      let { line, col } = clampedCursor;
-      await invoke("insert_newline", { line, col });
-      await refreshLines();
-      setCursor({ line: clampedCursor.line + 1, col: 0 });
-      setDirty(true);
-    }
-    // Handle Delete character
-    else if (e.key === "Backspace") {
-      let { line, col } = clampedCursor;
-      if (col == 0 && line == 0) return;
+      switch (e.key) {
+        case "Enter":
+          command = "insert_newline";
+          payload = { pos: charIdx };
+          break;
+        case "Tab":
+          command = "insert_char";
+          payload = { pos: charIdx, ch: '\t' };
+          break;
+        case "Backspace":
+          command = "delete_char";
+          payload = { pos: charIdx };
+          break;
+        default:
+          command = "insert_char";
+          payload = { pos: charIdx, ch: e.key };
+      }
 
-      if (col == 0) {
-        const newColPosition = lines[line - 1]?.length ?? 0;
-        await invoke("delete_char", { line: line - 1, col: newColPosition });
-        await refreshLines();
-        setClampedCursor(line - 1, newColPosition === 0 ? newColPosition : newColPosition - 1);
-      } else {
-        await invoke("delete_char", { line, col: col - 1 });
-        await refreshLines();
-        setClampedCursor(line, col - 1);
+      const result = await invoke<EditResult>(command, payload);
+      if (result) {
+        const newVisualMap = buildVisualMap(result.lines, editorWidth);
+        const newVisualCursor = translateLogicalToVisual(result.cursor_pos, newVisualMap, result.lines);
+        setCursor(newVisualCursor);
+        setVisualMap(newVisualMap);
+        setLogicalLines(result.lines);
+        setDirty(true);
       }
-      setDirty(true);
-    }
-    // Handle undo
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
-      await invoke("undo");
-      // TODO: update cursor accordingly
-      setDirty(true);
-      await refreshLines();
-    }
-    // Handle Redo
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
-      await invoke("redo");
-      // TODO: update cursor accordingly
-      setDirty(true);
-      await refreshLines();
-    }
-    // Handle arrow keys
-    else if (e.key === "ArrowLeft") {
-      if (cursor.col > 0) {
-        setClampedCursor(cursor.line, cursor.col - 1);
-      } else if (cursor.line > 0) {
-        setClampedCursor(cursor.line - 1, lines[cursor.line - 1]?.length ?? 0);
+    } else {
+      // Navigation (FE only)
+      let newCursor = { ...cursor };
+
+      switch (e.key) {
+        case "ArrowUp":
+          if (cursor.visualLine > 0) {
+            newCursor.visualLine--;
+          }
+          break;
+
+        case "ArrowDown":
+          if (cursor.visualLine < visualMap.length - 1) {
+            newCursor.visualLine++;
+          }
+          break;
+
+        case "ArrowLeft":
+          if (cursor.desiredCol > 0) {
+            newCursor.desiredCol--;
+          } else if (cursor.visualLine > 0) {
+            const prevLine = visualMap[cursor.visualLine - 1];
+            newCursor = {
+              visualLine: cursor.visualLine - 1,
+              desiredCol: calculateVisualWidth(prevLine.text)
+            };
+          }
+          break;
+
+        case "ArrowRight":
+          const currentLine = visualMap[cursor.visualLine];
+          if (!currentLine) break;
+
+          const currentLineWidth = calculateVisualWidth(currentLine.text);
+          if (cursor.desiredCol < currentLineWidth) {
+            newCursor.desiredCol++;
+          } else if (cursor.visualLine < visualMap.length - 1) {
+            newCursor = {
+              visualLine: cursor.visualLine + 1,
+              desiredCol: 0
+            };
+          }
+          break;
       }
-    }
-    else if (e.key === "ArrowRight") {
-      const lineLen = lines[clampedCursor.line]?.length ?? 0;
-      if (cursor.col < lineLen) {
-        setClampedCursor(cursor.line, cursor.col + 1);
-      } else if (cursor.line < lines.length - 1) {
-        setClampedCursor(cursor.line + 1, 0);
-      }
-    }
-    else if (e.key === "ArrowUp") {
-      if (cursor.line > 0) {
-        const prevLineLen = lines[cursor.line - 1]?.length ?? 0;
-        setClampedCursor(cursor.line - 1, Math.min(cursor.col, prevLineLen));
-      }
-    }
-    else if (e.key === "ArrowDown") {
-      if (cursor.line < lines.length - 1) {
-        const nextLineLen = lines[cursor.line + 1]?.length ?? 0;
-        setClampedCursor(cursor.line + 1, Math.min(cursor.col, nextLineLen));
-      }
+
+      // After any navigation, clamp the desiredCol to the new line's length.
+      const targetLineText = visualMap[newCursor.visualLine]?.text ?? "";
+      newCursor.desiredCol = Math.min(newCursor.desiredCol, calculateVisualWidth(targetLineText));
+
+      setCursor(newCursor);
     }
   }
 
   return {
     containerRef,
     handleKeyDown,
-    lines,
-    cursor,
+    visualMap,
+    cursor
   }
 }
