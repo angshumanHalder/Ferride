@@ -130,51 +130,68 @@ pub fn delete_char(pos: usize, state: tauri::State<EditorState>) -> Result<EditR
 }
 
 #[tauri::command]
-pub fn undo(state: tauri::State<EditorState>) -> Result<(), String> {
+pub fn undo(state: tauri::State<EditorState>) -> Result<EditResult, String> {
     let mut undo_stack = state.undo_stack.lock().unwrap();
     if let Some(action) = undo_stack.pop() {
         let mut doc = state.document.lock().unwrap();
         let mut redo_stack = state.redo_stack.lock().unwrap();
+        let new_cursor_pos;
 
         match action {
             EditAction::Insert { pos, text } => {
                 doc.insert(pos, &text);
+                new_cursor_pos = pos + text.chars().count();
                 redo_stack.push(EditAction::Delete { pos, text });
             }
             EditAction::Delete { pos, text } => {
                 let end = pos + text.chars().count();
                 let deleted_text = doc.slice(pos..end).to_string();
                 doc.remove(pos..end);
+                new_cursor_pos = pos;
                 redo_stack.push(EditAction::Insert {
                     pos,
                     text: deleted_text,
                 });
             }
         }
-        Ok(())
+        mem::drop(doc);
+        Ok(EditResult {
+            lines: state.get_rendered_text(),
+            cursor_pos: new_cursor_pos,
+        })
     } else {
         Err("No actions to undo".into())
     }
 }
 
 #[tauri::command]
-pub fn redo(state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, String> {
+pub fn redo(state: tauri::State<EditorState>) -> Result<EditResult, String> {
     let mut redo_stack = state.redo_stack.lock().unwrap();
     if let Some(action) = redo_stack.pop() {
         let mut doc = state.document.lock().unwrap();
         let mut undo_stack = state.undo_stack.lock().unwrap();
+        let new_cursor_pos;
 
         match action {
             EditAction::Insert { pos, text } => {
                 doc.insert(pos, &text);
+                new_cursor_pos = pos + text.chars().count();
                 undo_stack.push(EditAction::Delete { pos, text });
             }
             EditAction::Delete { pos, text } => {
                 let end = pos + text.chars().count();
                 doc.remove(pos..end);
+                new_cursor_pos = pos;
                 undo_stack.push(EditAction::Insert { pos, text });
             }
         }
+
+        mem::drop(doc);
+        Ok(EditResult {
+            lines: state.get_rendered_text(),
+            cursor_pos: new_cursor_pos,
+        })
+    } else {
+        Err("No actions to redo".into())
     }
-    Ok(state.get_rendered_text())
 }

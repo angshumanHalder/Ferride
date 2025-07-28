@@ -11,7 +11,6 @@ pub struct EditorState {
     pub document: Mutex<Rope>,
     pub undo_stack: Mutex<Vec<EditAction>>,
     pub redo_stack: Mutex<Vec<EditAction>>,
-    pub tab_width: usize,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -32,7 +31,6 @@ impl Default for EditorState {
             document: Mutex::new(Rope::new()),
             undo_stack: Mutex::new(Vec::new()),
             redo_stack: Mutex::new(Vec::new()),
-            tab_width: 4,
         }
     }
 }

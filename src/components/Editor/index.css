@@ -18,11 +18,9 @@
   background: #fff;
   height: 1rem;
   vertical-align: middle;
-  /* animation: blinker ls step-start infinite; */
 }
 
-@keyframes blinker {
-  50% {
-    opacity: 0;
-  }
+.selection {
+  background-color: #0078d4;
+  color: #ffffff;
 }

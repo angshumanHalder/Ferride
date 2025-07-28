@@ -44,26 +44,17 @@ export function translateVisualToLogical(
   visualMap: VisualLine[],
   logicaLines: LineInfo[],
 ): number {
-  console.log("translateVisualToLogical", cursor, visualMap, logicaLines);
   if (visualMap.length === 0) return 0;
 
   const currentVisualLine = visualMap[cursor.visualLine];
-  console.log("currentVisualLine", currentVisualLine);
   if (!currentVisualLine) return 0;
 
   const parentLogicalLine = logicaLines[currentVisualLine.logicalLineIndex];
-  console.log("parentLogicalLine", parentLogicalLine);
   if (!parentLogicalLine) return 0;
 
   const offsetInVisualText = getCharIdxFromCol(
     currentVisualLine.text,
     cursor.desiredCol,
-  );
-  console.log(
-    "offsetInVisualText",
-    offsetInVisualText,
-    parentLogicalLine.start_char_idx,
-    currentVisualLine.startCharOffset,
   );
 
   return (
@@ -120,6 +111,14 @@ export function buildVisualMap(
   editorWidth: number,
   font = "16px monospace",
 ): VisualLine[] {
+  if (editorWidth <= 0) {
+    return logicalLines.map((line, i) => ({
+      logicalLineIndex: i,
+      startCharOffset: 0,
+      text: line.text,
+    }));
+  }
+
   if (!context) return [];
   context.font = font;
 
@@ -153,7 +152,9 @@ export function buildVisualMap(
         }
 
         if (segmentWidth > editorWidth) {
-          breakcharIdx = lastGoodBreakPoint !== -1 ? lastGoodBreakPoint : j;
+          const breakPoint = j > 0 ? j : 1;
+          breakcharIdx =
+            lastGoodBreakPoint !== -1 ? lastGoodBreakPoint : breakPoint;
           break;
         }
       }
