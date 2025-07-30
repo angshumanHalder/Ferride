@@ -5,7 +5,17 @@ import "./index.css";
 
 export function Editor() {
 
-  const { containerRef, handleKeyDown, visualMap, cursor, selection, logicalLines } = useEditorHook();
+  const {
+    containerRef,
+    handleKeyDown,
+    visualMap,
+    cursor,
+    selection,
+    logicalLines,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+  } = useEditorHook();
 
   return (
     <div
@@ -13,20 +23,24 @@ export function Editor() {
       className="editor-container"
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onSelect={(e) => e.preventDefault()}
     >
       {visualMap.map((line, idx) => {
-        if (selection) {
+        if (selection && selection.anchor !== selection.head) {
           const selectionStart = Math.min(selection.anchor, selection.head);
           const selectionEnd = Math.max(selection.anchor, selection.head);
 
           const logicalLine = logicalLines[line.logicalLineIndex];
-          if (!logicalLine) return <div key={idx} className="editor-line">{line.text}</div>;
+          if (!logicalLine) return <div key={idx} className="editor-line" data-line-index={idx}>{line.text}</div>;
 
           const lineStartIdx = logicalLine.start_char_idx + line.startCharOffset;
           const lineEndIdx = lineStartIdx + line.text.length;
 
           if (lineEndIdx < selectionStart || lineStartIdx >= selectionEnd) {
-            return <div key={idx} className="editor-line">{renderTextWithTabs(line.text)}</div>;
+            return <div key={idx} className="editor-line" data-line-index={idx}>{renderTextWithTabs(line.text)}</div>;
           }
 
           const startIdx = Math.max(lineStartIdx, selectionStart) - lineStartIdx;
@@ -37,7 +51,7 @@ export function Editor() {
           const after = line.text.substring(endIdx);
 
           return (
-            <div key={idx} className="editor-line">
+            <div key={idx} className="editor-line" data-line-index={idx}>
               <span>{renderTextWithTabs(before)}</span>
               <span className="selection">{renderTextWithTabs(highlighted)}</span>
               <span>{renderTextWithTabs(after)}</span>
@@ -46,7 +60,7 @@ export function Editor() {
 
         }
         return (
-          <div key={idx} className="editor-line">
+          <div key={idx} className="editor-line" data-line-index={idx}>
             {idx === cursor.visualLine ? (
               (() => {
                 const charIndex = getCharIdxFromCol(line.text, cursor.desiredCol);

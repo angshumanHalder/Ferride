@@ -14,25 +14,44 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let new_file_item = MenuItem::with_id(app, "new_file", "New File", true, None::<&str>)?;
-            let save_as_item = MenuItem::with_id(app, "save_as", "Save As...", true, None::<&str>)?;
+            let new_file_item = MenuItem::with_id(app, "new-file", "New File", true, None::<&str>)?;
+            let save_as_item = MenuItem::with_id(app, "save-as", "Save As...", true, None::<&str>)?;
             let open_file_item =
-                MenuItem::with_id(app, "open_file", "Open File", true, None::<&str>)?;
+                MenuItem::with_id(app, "open-file", "Open File", true, None::<&str>)?;
+
+            let undo_item = MenuItem::with_id(app, "edit-undo", "Undo", true, Some("cmdOrCtrl+Z"))?;
+            let cut_item = MenuItem::with_id(app, "edit-cut", "Cut", true, Some("cmdOrCtrl+X"))?;
+            let copy_item = MenuItem::with_id(app, "edit-copy", "Copy", true, Some("cmdOrCtrl+C"))?;
+            let paste_item =
+                MenuItem::with_id(app, "edit-paste", "Paste", true, Some("cmdOrCtrl+V"))?;
+            let select_all_item = MenuItem::with_id(
+                app,
+                "edit-select-all",
+                "Select All",
+                true,
+                Some("cmdOrCtrl+A"),
+            )?;
+
+            #[cfg(target_os = "macos")]
+            let redo_item = MenuItem::with_id(app, "edit-redo", "Redo", true, Some("cmd+shift+z"))?;
+            #[cfg(not(target_os = "macos"))]
+            let redo_item = MenuItem::with_id(app, "edit-redo", "Redo", true, Some("cmdOrCtrl+y"))?;
 
             let menu = {
                 let edit_menu = SubmenuBuilder::new(app, "Edit")
-                    .undo()
-                    .redo()
+                    .item(&undo_item)
+                    .item(&redo_item)
                     .separator()
-                    .cut()
-                    .copy()
-                    .paste()
+                    .item(&cut_item)
+                    .item(&copy_item)
+                    .item(&paste_item)
+                    .item(&select_all_item)
                     .build()?;
 
                 let file_menu_builder = SubmenuBuilder::new(app, "File")
                     .item(&new_file_item)
-                    .item(&save_as_item)
-                    .item(&open_file_item);
+                    .item(&open_file_item)
+                    .item(&save_as_item);
 
                 #[cfg(target_os = "macos")]
                 {
@@ -66,18 +85,8 @@ pub fn run() {
             app.set_menu(menu)?;
 
             app.on_menu_event(move |app_handle: &tauri::AppHandle, event| {
-                match event.id().0.as_str() {
-                    "new_file" => {
-                        app_handle.emit("menu-event", "new-file").unwrap();
-                    }
-                    "save_as" => {
-                        app_handle.emit("menu-event", "save-as").unwrap();
-                    }
-                    "open_file" => {
-                        app_handle.emit("menu-event", "open-file").unwrap();
-                    }
-                    _ => {}
-                }
+                let event_id = event.id().0.as_str();
+                app_handle.emit("menu-event", event_id).unwrap();
             });
             Ok(())
         })
@@ -93,6 +102,9 @@ pub fn run() {
             commands::delete_char,
             commands::undo,
             commands::redo,
+            commands::copy_text,
+            commands::cut_text,
+            commands::paste_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

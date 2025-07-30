@@ -5,6 +5,10 @@
   min-height: 200px;
   padding: 8px;
   color: #ccc;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .editor-line {
@@ -14,7 +18,7 @@
 
 .cursor {
   display: inline-block;
-  width: 2px;
+  width: 1px;
   background: #fff;
   height: 1rem;
   vertical-align: middle;

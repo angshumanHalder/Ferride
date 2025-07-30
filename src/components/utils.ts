@@ -180,3 +180,48 @@ export function buildVisualMap(
 
   return visualMap;
 }
+
+export function getCharIdxFromMousePosition(
+  x: number,
+  y: number,
+  container: HTMLDivElement,
+  visualMap: VisualLine[],
+  logicalLines: LineInfo[],
+  font = "16px monospace",
+): number {
+  if (!container || !context) return 0;
+
+  context.font = font;
+
+  const lineElements = Array.from(container.querySelectorAll(".editor-line"));
+  const clickedLineEl = lineElements.find((el) => {
+    const rect = el.getBoundingClientRect();
+    return y >= rect.top && y <= rect.bottom;
+  });
+  if (!clickedLineEl) return 0;
+
+  const lineIdxaAttr = clickedLineEl.getAttribute("data-line-index");
+  if (!lineIdxaAttr) return 0;
+
+  const visualLineIdx = parseInt(lineIdxaAttr, 10);
+  const visualLine = visualMap[visualLineIdx];
+  if (!visualLine) return 0;
+
+  const rect = clickedLineEl.getBoundingClientRect();
+  const relativeX = x - rect.left;
+
+  const graphemes = splitter.splitGraphemes(visualLine.text);
+  let measureWidth = 0;
+  let charCount = 0;
+  for (const grapheme of graphemes) {
+    const graphemeWidth = context.measureText(grapheme).width;
+    if (measureWidth + graphemeWidth / 2 > relativeX) {
+      break;
+    }
+    measureWidth += graphemeWidth;
+    charCount += grapheme.length;
+  }
+
+  const logicalLine = logicalLines[visualLine.logicalLineIndex];
+  return logicalLine.start_char_idx + visualLine.startCharOffset + charCount;
+}

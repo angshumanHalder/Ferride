@@ -23,9 +23,10 @@ export enum EditorActionType {
   SetDirty = "SET_DIRTY",
   ResetState = "RESET_STATE",
   StartSelection = "START_SELECTION",
-  UpdateSelectionHead = "UPDATE_SELETION_HEAD",
+  UpdateSelectionHead = "UPDATE_SELECTION_HEAD",
   ClearSelection = "CLEAR_SELECTION",
   ClearStickyColumn = "CLEAR_STICKY_COLUMN",
+  SelectAll = "SELECT_ALL",
 }
 
 export const initialState: EditorState = {
@@ -61,7 +62,8 @@ export type EditorAction =
       payload: { charIdx: number };
     }
   | { type: EditorActionType.ClearSelection }
-  | { type: EditorActionType.ClearStickyColumn };
+  | { type: EditorActionType.ClearStickyColumn }
+  | { type: EditorActionType.SelectAll };
 
 export function editorReducer(
   state: EditorState,
@@ -93,6 +95,7 @@ export function editorReducer(
         cursor: newCursor,
         isDirty: true,
         stickyCol: null,
+        selection: null,
       };
     }
     case EditorActionType.Navigate: {
@@ -198,23 +201,37 @@ export function editorReducer(
         editorWidth: state.editorWidth,
       };
     }
-    case EditorActionType.StartSelection:
+    case EditorActionType.StartSelection: {
+      const newCursor = translateLogicalToVisual(
+        action.payload.charIdx,
+        state.visualMap,
+        state.logicalLines,
+      );
       return {
         ...state,
+        cursor: newCursor,
         selection: {
           anchor: action.payload.charIdx,
           head: action.payload.charIdx,
         },
       };
-    case EditorActionType.UpdateSelectionHead:
+    }
+    case EditorActionType.UpdateSelectionHead: {
       if (!state.selection) return state;
+      const newCursor = translateLogicalToVisual(
+        action.payload.charIdx,
+        state.visualMap,
+        state.logicalLines,
+      );
       return {
         ...state,
+        cursor: newCursor,
         selection: {
           ...state.selection,
           head: action.payload.charIdx,
         },
       };
+    }
     case EditorActionType.ClearSelection:
       return {
         ...state,
@@ -222,6 +239,14 @@ export function editorReducer(
       };
     case EditorActionType.ClearStickyColumn:
       return { ...state, stickyCol: null };
+    case EditorActionType.SelectAll:
+      if (state.logicalLines.length === 0) return state;
+      const lastLine = state.logicalLines[state.logicalLines.length - 1];
+      const endOfDocument = lastLine.start_char_idx + lastLine.text.length;
+      return {
+        ...state,
+        selection: { anchor: 0, head: endOfDocument },
+      };
     default:
       return state;
   }
