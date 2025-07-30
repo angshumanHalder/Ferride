@@ -140,13 +140,6 @@ pub fn delete_char(
     selection: Option<(usize, usize)>,
     state: tauri::State<EditorState>,
 ) -> Result<EditResult, String> {
-    if pos == 0 {
-        return Ok(EditResult {
-            lines: state.get_rendered_text(),
-            cursor_pos: pos,
-        });
-    }
-
     let mut doc = state.document.lock().unwrap();
     let mut undo_stack = state.undo_stack.lock().unwrap();
     let new_cursor_pos;
@@ -159,7 +152,7 @@ pub fn delete_char(
             text: deleted_text,
         });
         new_cursor_pos = start;
-    } else {
+    } else if pos > 0 {
         let delete_pos = pos.saturating_sub(1);
         if delete_pos >= doc.len_chars() {
             return Ok(EditResult {
@@ -174,6 +167,8 @@ pub fn delete_char(
             text: deleted_text,
         });
         new_cursor_pos = delete_pos;
+    } else {
+        new_cursor_pos = 0;
     }
 
     state.redo_stack.lock().unwrap().clear();

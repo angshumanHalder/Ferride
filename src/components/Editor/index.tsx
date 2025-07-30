@@ -1,10 +1,9 @@
-import { getCharIdxFromCol, renderTextWithTabs } from "../utils";
-import { useEditorHook } from "./hook";
-import "./index.css";
-
+import { StatuBar } from '../StatusBar';
+import { useEditorHook } from './hooks/hook.tsx';
+import '../../App.css';
+import { EditorLine } from '../EditorLine';
 
 export function Editor() {
-
   const {
     containerRef,
     handleKeyDown,
@@ -15,77 +14,45 @@ export function Editor() {
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
+    currentPath,
+    isDirty,
   } = useEditorHook();
 
   return (
-    <div
-      ref={containerRef}
-      className="editor-container"
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onSelect={(e) => e.preventDefault()}
-    >
-      {visualMap.map((line, idx) => {
-        if (selection && selection.anchor !== selection.head) {
-          const selectionStart = Math.min(selection.anchor, selection.head);
-          const selectionEnd = Math.max(selection.anchor, selection.head);
-
-          const logicalLine = logicalLines[line.logicalLineIndex];
-          if (!logicalLine) return <div key={idx} className="editor-line" data-line-index={idx}>{line.text}</div>;
-
-          const lineStartIdx = logicalLine.start_char_idx + line.startCharOffset;
-          const lineEndIdx = lineStartIdx + line.text.length;
-
-          if (lineEndIdx < selectionStart || lineStartIdx >= selectionEnd) {
-            return <div key={idx} className="editor-line" data-line-index={idx}>{renderTextWithTabs(line.text)}</div>;
-          }
-
-          const startIdx = Math.max(lineStartIdx, selectionStart) - lineStartIdx;
-          const endIdx = Math.min(lineEndIdx, selectionEnd) - lineStartIdx;
-
-          const before = line.text.substring(0, startIdx);
-          const highlighted = line.text.substring(startIdx, endIdx);
-          const after = line.text.substring(endIdx);
-
-          return (
-            <div key={idx} className="editor-line" data-line-index={idx}>
-              <span>{renderTextWithTabs(before)}</span>
-              <span className="selection">{renderTextWithTabs(highlighted)}</span>
-              <span>{renderTextWithTabs(after)}</span>
-            </div>
-          );
-
-        }
-        return (
+    <div className="app-container">
+      <div
+        ref={containerRef}
+        className="editor-container"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onSelect={(e) => e.preventDefault()}
+      >
+        {visualMap.map((line, idx) => (
           <div key={idx} className="editor-line" data-line-index={idx}>
-            {idx === cursor.visualLine ? (
-              (() => {
-                const charIndex = getCharIdxFromCol(line.text, cursor.desiredCol);
-                const beforeText = line.text.substring(0, charIndex);
-                const afterText = line.text.substring(charIndex);
-
-                return (
-                  <>
-                    <span>{renderTextWithTabs(beforeText)}</span>
-                    <span className="cursor"></span>
-                    <span>{renderTextWithTabs(afterText)}</span>
-                  </>
-                );
-              })()
-            ) : (
-              renderTextWithTabs(line.text)
-            )}
+            <EditorLine
+              line={line}
+              isCurrentLine={idx === cursor.visualLine}
+              cursor={cursor}
+              selection={selection}
+              logicalLine={logicalLines[line.logicalLineIndex]}
+            />
           </div>
-        );
-      })}
-      {visualMap.length === 0 && (
-        <div className="editor-line">
-          <span className="cursor"></span>
-        </div>
-      )}
+        ))}
+        {visualMap.length === 0 && (
+          <div className="editor-line">
+            <span className="cursor"></span>
+          </div>
+        )}
+      </div>
+      <StatuBar
+        cursorLine={cursor.visualLine}
+        cursorCol={cursor.desiredCol}
+        currentPath={currentPath}
+        isDirty={isDirty}
+      />
     </div>
   );
 }

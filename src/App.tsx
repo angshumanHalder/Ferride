@@ -10,9 +10,7 @@ function App() {
   // }
 
   return (
-    <div className="container">
-      <Editor />
-    </div>
+    <Editor />
   );
 }
 

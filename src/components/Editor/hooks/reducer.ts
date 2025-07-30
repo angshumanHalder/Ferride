@@ -3,7 +3,7 @@ import {
   calculateVisualWidth,
   translateLogicalToVisual,
   translateVisualToLogical,
-} from "../utils";
+} from '../../utils';
 
 export interface EditorState {
   logicalLines: LineInfo[];
@@ -17,18 +17,18 @@ export interface EditorState {
 }
 
 export enum EditorActionType {
-  SetInitialState = "SET_INITIAL_STATE",
-  EditSuccess = "EDIT_SUCCESS",
-  Navigate = "NAVIGATE",
-  SetEditorWidth = "SET_EDITOR_WIDTH",
-  SetDirty = "SET_DIRTY",
-  ResetState = "RESET_STATE",
-  StartSelection = "START_SELECTION",
-  UpdateSelectionHead = "UPDATE_SELECTION_HEAD",
-  ClearSelection = "CLEAR_SELECTION",
-  ClearStickyColumn = "CLEAR_STICKY_COLUMN",
-  SelectAll = "SELECT_ALL",
-  SaveSuccess = "SAVE_SUCCESS",
+  SetInitialState = 'SET_INITIAL_STATE',
+  EditSuccess = 'EDIT_SUCCESS',
+  Navigate = 'NAVIGATE',
+  SetEditorWidth = 'SET_EDITOR_WIDTH',
+  SetDirty = 'SET_DIRTY',
+  ResetState = 'RESET_STATE',
+  StartSelection = 'START_SELECTION',
+  UpdateSelectionHead = 'UPDATE_SELECTION_HEAD',
+  ClearSelection = 'CLEAR_SELECTION',
+  ClearStickyColumn = 'CLEAR_STICKY_COLUMN',
+  SelectAll = 'SELECT_ALL',
+  SaveSuccess = 'SAVE_SUCCESS',
 }
 
 export const initialState: EditorState = {
@@ -51,7 +51,7 @@ export type EditorAction =
   | {
       type: EditorActionType.Navigate;
       payload: {
-        direction: "Up" | "Down" | "Left" | "Right";
+        direction: 'Up' | 'Down' | 'Left' | 'Right';
         shiftKey: boolean;
       };
     }
@@ -71,7 +71,7 @@ export type EditorAction =
 
 export function editorReducer(
   state: EditorState,
-  action: EditorAction,
+  action: EditorAction
 ): EditorState {
   switch (action.type) {
     case EditorActionType.SetInitialState: {
@@ -91,7 +91,7 @@ export function editorReducer(
       const newCursor = translateLogicalToVisual(
         cursor_pos,
         newVisualMap,
-        lines,
+        lines
       );
       return {
         ...state,
@@ -112,7 +112,7 @@ export function editorReducer(
           const startCharIdx = translateVisualToLogical(
             state.cursor,
             state.visualMap,
-            state.logicalLines,
+            state.logicalLines
           );
           newSelection = { anchor: startCharIdx, head: startCharIdx };
         }
@@ -124,27 +124,27 @@ export function editorReducer(
       let newStickyCol = state.stickyCol;
 
       switch (direction) {
-        case "Up":
-        case "Down": {
+        case 'Up':
+        case 'Down': {
           const sticky = state.stickyCol ?? state.cursor.desiredCol;
           newStickyCol = sticky;
-          if (direction === "Up" && newCursor.visualLine > 0) {
+          if (direction === 'Up' && newCursor.visualLine > 0) {
             newCursor.visualLine--;
           } else if (
-            direction === "Down" &&
+            direction === 'Down' &&
             newCursor.visualLine < state.visualMap.length - 1
           ) {
             newCursor.visualLine++;
           }
           const targetLineText =
-            state.visualMap[newCursor.visualLine]?.text ?? "";
+            state.visualMap[newCursor.visualLine]?.text ?? '';
           newCursor.desiredCol = Math.min(
             sticky,
-            calculateVisualWidth(targetLineText),
+            calculateVisualWidth(targetLineText)
           );
           break;
         }
-        case "Left": {
+        case 'Left': {
           newStickyCol = null; // Horizontal movement clears sticky column
           if (newCursor.desiredCol > 0) {
             newCursor.desiredCol--;
@@ -155,7 +155,7 @@ export function editorReducer(
           }
           break;
         }
-        case "Right": {
+        case 'Right': {
           newStickyCol = null; // Horizontal movement clears sticky column
           const currentLine = state.visualMap[newCursor.visualLine];
           if (currentLine) {
@@ -175,7 +175,7 @@ export function editorReducer(
         const newHeadIdx = translateVisualToLogical(
           newCursor,
           state.visualMap,
-          state.logicalLines,
+          state.logicalLines
         );
         newSelection.head = newHeadIdx;
       }
@@ -210,7 +210,7 @@ export function editorReducer(
       const newCursor = translateLogicalToVisual(
         action.payload.charIdx,
         state.visualMap,
-        state.logicalLines,
+        state.logicalLines
       );
       return {
         ...state,
@@ -226,7 +226,7 @@ export function editorReducer(
       const newCursor = translateLogicalToVisual(
         action.payload.charIdx,
         state.visualMap,
-        state.logicalLines,
+        state.logicalLines
       );
       return {
         ...state,
