@@ -13,6 +13,7 @@ export interface EditorState {
   editorWidth: number;
   selection: { anchor: number; head: number } | null;
   stickyCol: number | null;
+  currentPath: string | null;
 }
 
 export enum EditorActionType {
@@ -27,6 +28,7 @@ export enum EditorActionType {
   ClearSelection = "CLEAR_SELECTION",
   ClearStickyColumn = "CLEAR_STICKY_COLUMN",
   SelectAll = "SELECT_ALL",
+  SaveSuccess = "SAVE_SUCCESS",
 }
 
 export const initialState: EditorState = {
@@ -37,12 +39,13 @@ export const initialState: EditorState = {
   editorWidth: 0,
   selection: null,
   stickyCol: null,
+  currentPath: null,
 };
 
 export type EditorAction =
   | {
       type: EditorActionType.SetInitialState;
-      payload: { lines: LineInfo[]; width: number };
+      payload: { lines: LineInfo[]; width: number; path: string | null };
     }
   | { type: EditorActionType.EditSuccess; payload: EditResult }
   | {
@@ -63,7 +66,8 @@ export type EditorAction =
     }
   | { type: EditorActionType.ClearSelection }
   | { type: EditorActionType.ClearStickyColumn }
-  | { type: EditorActionType.SelectAll };
+  | { type: EditorActionType.SelectAll }
+  | { type: EditorActionType.SaveSuccess; payload: { path: string } };
 
 export function editorReducer(
   state: EditorState,
@@ -71,13 +75,14 @@ export function editorReducer(
 ): EditorState {
   switch (action.type) {
     case EditorActionType.SetInitialState: {
-      const { lines, width } = action.payload;
+      const { lines, width, path } = action.payload;
       const newVisualMap = buildVisualMap(lines, width);
       return {
         ...state,
         logicalLines: lines,
         editorWidth: width,
         visualMap: newVisualMap,
+        currentPath: path,
       };
     }
     case EditorActionType.EditSuccess: {
@@ -247,6 +252,13 @@ export function editorReducer(
         ...state,
         selection: { anchor: 0, head: endOfDocument },
       };
+    case EditorActionType.SaveSuccess:
+      return {
+        ...state,
+        isDirty: false,
+        currentPath: action.payload.path,
+      };
+
     default:
       return state;
   }

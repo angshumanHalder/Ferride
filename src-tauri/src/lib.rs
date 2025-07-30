@@ -14,10 +14,20 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let new_file_item = MenuItem::with_id(app, "new-file", "New File", true, None::<&str>)?;
-            let save_as_item = MenuItem::with_id(app, "save-as", "Save As...", true, None::<&str>)?;
+            let new_file_item =
+                MenuItem::with_id(app, "new-file", "New File", true, Some("cmdOrCtrl+N"))?;
             let open_file_item =
-                MenuItem::with_id(app, "open-file", "Open File", true, None::<&str>)?;
+                MenuItem::with_id(app, "open-file", "Open File", true, Some("cmdOrCtrl+O"))?;
+
+            let save_as_item = MenuItem::with_id(
+                app,
+                "save-as",
+                "Save As...",
+                true,
+                Some("cmdOrCtrl+Shift+S"),
+            )?;
+            let save_file_item =
+                MenuItem::with_id(app, "save-file", "Save", true, Some("cmdOrCtrl+S"))?;
 
             let undo_item = MenuItem::with_id(app, "edit-undo", "Undo", true, Some("cmdOrCtrl+Z"))?;
             let cut_item = MenuItem::with_id(app, "edit-cut", "Cut", true, Some("cmdOrCtrl+X"))?;
@@ -51,6 +61,7 @@ pub fn run() {
                 let file_menu_builder = SubmenuBuilder::new(app, "File")
                     .item(&new_file_item)
                     .item(&open_file_item)
+                    .item(&save_file_item)
                     .item(&save_as_item);
 
                 #[cfg(target_os = "macos")]

@@ -1,7 +1,7 @@
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import React, { useEffect, useReducer, useRef } from "react";
-import { handleNewFile, handleOpenFile } from "../operations";
+import { handleNewFile, handleOpenFile, handleSaveFileAs } from "../operations";
 import { getCharIdxFromMousePosition, translateVisualToLogical } from "../utils";
 import { EditorActionType, editorReducer, EditorState, initialState } from "./reducer";
 
@@ -13,6 +13,19 @@ export function useEditorHook() {
   const stateRef = useRef<EditorState>(state);
 
   // CORE LOGIC
+  //
+  const handleSave = async () => {
+    const currentState = stateRef.current;
+    if (currentState.currentPath) {
+      await invoke("save_file", { path: currentState.currentPath });
+      dispatch({ type: EditorActionType.SaveSuccess, payload: { path: currentState.currentPath } });
+    } else {
+      const newPath = await handleSaveFileAs();
+      if (newPath) {
+        dispatch({ type: EditorActionType.SaveSuccess, payload: { path: newPath } });
+      }
+    }
+  }
 
   useEffect(() => {
     stateRef.current = state;
@@ -32,15 +45,15 @@ export function useEditorHook() {
     }
 
     invoke<LineInfo[]>("get_rendered_text").then(lines => {
-      dispatch({ type: EditorActionType.SetInitialState, payload: { lines, width: currentWidth } });
+      dispatch({ type: EditorActionType.SetInitialState, payload: { lines, width: currentWidth, path: state.currentPath } });
     });
 
     const unlisten = listen("menu-event", (event) => {
       const currentState = stateRef.current;
       switch (event.payload) {
         case "open-file":
-          handleOpenFile().then((lines) => {
-            if (lines) dispatch({ type: EditorActionType.SetInitialState, payload: { lines, width: currentWidth } });
+          handleOpenFile().then((result) => {
+            if (result) dispatch({ type: EditorActionType.SetInitialState, payload: { lines: result.lines, width: currentWidth, path: result.path } });
           });
           break;
         case "new-file":
@@ -48,6 +61,14 @@ export function useEditorHook() {
             if (clearState) {
               dispatch({ type: EditorActionType.ResetState });
             }
+          });
+          break;
+        case "save-file":
+          handleSave();
+          break;
+        case "save-as":
+          handleSaveFileAs().then(newPath => {
+            if (newPath) dispatch({ type: EditorActionType.SaveSuccess, payload: { path: newPath } });
           });
           break;
         case "edit-undo":
@@ -113,8 +134,30 @@ export function useEditorHook() {
     const isCut = (ctrlKey || metaKey) && key.toLowerCase() === "x";
     const isCopy = (ctrlKey || metaKey) && key.toLowerCase() === "c";
     const isPaste = (ctrlKey || metaKey) && key.toLowerCase() === "v";
+    const isSave = (ctrlKey || metaKey) && key.toLowerCase() === "s";
+    const isSaveAs = (ctrlKey || metaKey) && shiftKey && key.toLowerCase() === "s";
+    const isOpenFile = (ctrlKey || metaKey) && key.toLowerCase() === "o";
+    const isNewFile = (ctrlKey || metaKey) && key.toLowerCase() === "n";
 
-    if (isCopy && state.selection) {
+    if (isNewFile) {
+      handleNewFile(state.isDirty).then((clearState) => {
+        if (clearState) {
+          dispatch({ type: EditorActionType.ResetState });
+        }
+      });
+    } else if (isOpenFile) {
+      handleOpenFile().then((result) => {
+        if (result) dispatch({ type: EditorActionType.SetInitialState, payload: { lines: result.lines, width: state.editorWidth, path: result.path } });
+      });
+    }
+    if (isSaveAs) {
+      handleSaveFileAs().then(newPath => {
+        if (newPath) dispatch({ type: EditorActionType.SaveSuccess, payload: { path: newPath } });
+      });
+    } else if (isSave) {
+      e.preventDefault();
+      await handleSave();
+    } else if (isCopy && state.selection) {
       const { anchor, head } = state.selection;
       const start = Math.min(anchor, head);
       const end = Math.max(anchor, head);

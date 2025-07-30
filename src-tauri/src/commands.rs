@@ -1,10 +1,10 @@
 use crate::{
-    editor::{EditAction, EditResult, LineInfo},
+    editor::{EditAction, EditResult, LineInfo, OpenFileResult},
     EditorState,
 };
 use arboard::Clipboard;
 use ropey::Rope;
-use std::{fs::File, mem};
+use std::{fs::File, mem, path::PathBuf};
 
 #[tauri::command]
 pub fn new_file(state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, String> {
@@ -13,6 +13,7 @@ pub fn new_file(state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, Strin
     let mut redo_stack = state.redo_stack.lock().unwrap();
 
     *doc = Rope::new();
+    *state.current_path.lock().unwrap() = None;
     undo_stack.clear();
     redo_stack.clear();
 
@@ -22,19 +23,30 @@ pub fn new_file(state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, Strin
 }
 
 #[tauri::command]
-pub fn open_file(path: String, state: tauri::State<EditorState>) -> Result<Vec<LineInfo>, String> {
+pub fn open_file(path: String, state: tauri::State<EditorState>) -> Result<OpenFileResult, String> {
     let file = File::open(&path).map_err(|e| e.to_string())?;
     let rope = Rope::from_reader(file).map_err(|e| e.to_string())?;
-    *state.document.lock().unwrap() = rope;
 
-    Ok(state.get_rendered_text())
+    let file_path = PathBuf::from(&path);
+
+    *state.document.lock().unwrap() = rope;
+    *state.current_path.lock().unwrap() = Some(path.into());
+
+    state.undo_stack.lock().unwrap().clear();
+    state.redo_stack.lock().unwrap().clear();
+
+    Ok(OpenFileResult {
+        lines: state.get_rendered_text(),
+        path: file_path,
+    })
 }
 
 #[tauri::command]
 pub fn save_file(path: String, state: tauri::State<EditorState>) -> Result<(), String> {
     let doc = state.document.lock().unwrap();
-    let file = File::create(path).map_err(|e| e.to_string())?;
+    let file = File::create(&path).map_err(|e| e.to_string())?;
     doc.write_to(file).map_err(|e| e.to_string())?;
+    *state.current_path.lock().unwrap() = Some(path.into());
     Ok(())
 }
 

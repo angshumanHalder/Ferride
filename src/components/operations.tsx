@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open, confirm } from "@tauri-apps/plugin-dialog";
+import { open, confirm, save } from "@tauri-apps/plugin-dialog";
 
 export async function handleOpenFile() {
   const filePath = await open({ multiple: false });
   if (typeof filePath === "string") {
     try {
-      const content = await invoke<LineInfo[]>("open_file", { path: filePath });
-      return content;
+      const result = await invoke<OpenFileResult>("open_file", { path: filePath });
+      return result;
     } catch (e) {
       console.error("Failed to open file: ", e);
       return null;
@@ -26,4 +26,17 @@ export async function handleNewFile(isDirty: boolean) {
     return true;
   }
   return true;
+}
+
+export async function handleSaveFileAs() {
+  try {
+    const filePath = await save();
+    if (filePath) {
+      await invoke("save_file", { path: filePath });
+      return filePath;
+    }
+  } catch (e) {
+    console.error("Failed to save file: ", e);
+  }
+  return null;
 }

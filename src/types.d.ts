@@ -15,3 +15,8 @@ interface VisualLine {
   startCharOffset: number;
   text: string;
 }
+
+interface OpenFileResult {
+  lines: LineInfo[];
+  path: string;
+}

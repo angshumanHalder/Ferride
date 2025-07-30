@@ -1,5 +1,8 @@
 use ropey::Rope;
-use std::sync::{Mutex, MutexGuard};
+use std::{
+    path::PathBuf,
+    sync::{Mutex, MutexGuard},
+};
 
 #[derive(Debug)]
 pub enum EditAction {
@@ -11,6 +14,7 @@ pub struct EditorState {
     pub document: Mutex<Rope>,
     pub undo_stack: Mutex<Vec<EditAction>>,
     pub redo_stack: Mutex<Vec<EditAction>>,
+    pub current_path: Mutex<Option<PathBuf>>,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -25,12 +29,19 @@ pub struct EditResult {
     pub cursor_pos: usize,
 }
 
+#[derive(serde::Serialize, Clone)]
+pub struct OpenFileResult {
+    pub lines: Vec<LineInfo>,
+    pub path: PathBuf,
+}
+
 impl Default for EditorState {
     fn default() -> Self {
         EditorState {
             document: Mutex::new(Rope::new()),
             undo_stack: Mutex::new(Vec::new()),
             redo_stack: Mutex::new(Vec::new()),
+            current_path: Mutex::new(None),
         }
     }
 }
