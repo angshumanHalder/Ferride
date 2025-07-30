@@ -199,6 +199,12 @@ export function useEventHandlers(
       (ctrlKey || metaKey) && shiftKey && key.toLowerCase() === 's';
     const isOpenFile = (ctrlKey || metaKey) && key.toLowerCase() === 'o';
     const isNewFile = (ctrlKey || metaKey) && key.toLowerCase() === 'n';
+    const isNavKey =
+      key.startsWith('Arrow') ||
+      key === 'Home' ||
+      key === 'End' ||
+      key === 'PageUp' ||
+      key === 'PageDown';
 
     if (isNewFile) {
       handleNewFile(state.isDirty).then((clearState) => {
@@ -322,13 +328,15 @@ export function useEventHandlers(
       const result = await invoke<EditResult>(command, payload);
       if (result)
         dispatch({ type: EditorActionType.EditSuccess, payload: result });
-    } else if (key.startsWith('Arrow')) {
+    } else if (isNavKey) {
       // Navigation (FE only)
       dispatch({
         type: EditorActionType.Navigate,
         payload: {
-          direction: key.replace('Arrow', '') as any,
-          shiftKey: e.shiftKey,
+          key: key as any,
+          shiftKey,
+          metaKey,
+          ctrlKey,
         },
       });
     }

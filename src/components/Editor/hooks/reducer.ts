@@ -51,8 +51,18 @@ export type EditorAction =
   | {
       type: EditorActionType.Navigate;
       payload: {
-        direction: 'Up' | 'Down' | 'Left' | 'Right';
+        key:
+          | 'ArrowUp'
+          | 'ArrowDown'
+          | 'ArrowLeft'
+          | 'ArrowRight'
+          | 'Home'
+          | 'End'
+          | 'PageUp'
+          | 'PageDown';
         shiftKey: boolean;
+        metaKey: boolean;
+        ctrlKey: boolean;
       };
     }
   | { type: EditorActionType.SetEditorWidth; payload: number }
@@ -104,7 +114,9 @@ export function editorReducer(
       };
     }
     case EditorActionType.Navigate: {
-      const { direction, shiftKey } = action.payload;
+      const { key, shiftKey, metaKey, ctrlKey } = action.payload;
+      const isMac = navigator.userAgent.includes('Mac');
+      const isMeta = isMac ? metaKey : ctrlKey;
 
       let newSelection = state.selection;
       if (shiftKey) {
@@ -123,15 +135,18 @@ export function editorReducer(
       let newCursor = { ...state.cursor };
       let newStickyCol = state.stickyCol;
 
-      switch (direction) {
-        case 'Up':
-        case 'Down': {
+      switch (key) {
+        case 'ArrowUp':
+        case 'ArrowDown': {
           const sticky = state.stickyCol ?? state.cursor.desiredCol;
           newStickyCol = sticky;
-          if (direction === 'Up' && newCursor.visualLine > 0) {
+          if (isMeta) {
+            newCursor.visualLine =
+              key === 'ArrowUp' ? 0 : state.visualMap.length - 1;
+          } else if (key === 'ArrowUp' && newCursor.visualLine > 0) {
             newCursor.visualLine--;
           } else if (
-            direction === 'Down' &&
+            key === 'ArrowDown' &&
             newCursor.visualLine < state.visualMap.length - 1
           ) {
             newCursor.visualLine++;
@@ -144,29 +159,69 @@ export function editorReducer(
           );
           break;
         }
-        case 'Left': {
-          newStickyCol = null; // Horizontal movement clears sticky column
-          if (newCursor.desiredCol > 0) {
-            newCursor.desiredCol--;
-          } else if (newCursor.visualLine > 0) {
-            const prevLine = state.visualMap[newCursor.visualLine - 1];
-            newCursor.visualLine--;
-            newCursor.desiredCol = calculateVisualWidth(prevLine.text);
+        case 'ArrowLeft':
+        case 'ArrowRight': {
+          newStickyCol = null; // Horizontal movement clears sticky
+          const currentLineText =
+            state.visualMap[newCursor.visualLine]?.text ?? '';
+
+          if (isMeta) {
+            // Go to start/end of line on macOS
+            newCursor.desiredCol =
+              key === 'ArrowLeft' ? 0 : calculateVisualWidth(currentLineText);
+          } else {
+            // Your existing character-by-character logic
+            if (key === 'ArrowLeft') {
+              if (newCursor.desiredCol > 0) newCursor.desiredCol--;
+              else if (newCursor.visualLine > 0) {
+                const prevLine = state.visualMap[newCursor.visualLine - 1];
+                newCursor.visualLine--;
+                newCursor.desiredCol = calculateVisualWidth(prevLine.text);
+              }
+            } else {
+              // Right
+              const currentLineWidth = calculateVisualWidth(currentLineText);
+              if (newCursor.desiredCol < currentLineWidth)
+                newCursor.desiredCol++;
+              else if (newCursor.visualLine < state.visualMap.length - 1) {
+                newCursor.visualLine++;
+                newCursor.desiredCol = 0;
+              }
+            }
           }
           break;
         }
-        case 'Right': {
-          newStickyCol = null; // Horizontal movement clears sticky column
-          const currentLine = state.visualMap[newCursor.visualLine];
-          if (currentLine) {
-            const currentLineWidth = calculateVisualWidth(currentLine.text);
-            if (newCursor.desiredCol < currentLineWidth) {
-              newCursor.desiredCol++;
-            } else if (newCursor.visualLine < state.visualMap.length - 1) {
-              newCursor.visualLine++;
-              newCursor.desiredCol = 0;
-            }
-          }
+
+        case 'Home':
+          newCursor.desiredCol = 0;
+          newStickyCol = null;
+          break;
+
+        case 'End':
+          const currentLineText =
+            state.visualMap[newCursor.visualLine]?.text ?? '';
+          newCursor.desiredCol = calculateVisualWidth(currentLineText);
+          newStickyCol = null;
+          break;
+
+        case 'PageUp':
+        case 'PageDown': {
+          const linePerPage = 15;
+          const moveAmount = key === 'PageUp' ? -linePerPage : linePerPage;
+          newCursor.visualLine = Math.max(
+            0,
+            Math.min(
+              state.visualMap.length - 1,
+              newCursor.visualLine + moveAmount
+            )
+          );
+          newStickyCol = state.stickyCol ?? state.cursor.desiredCol;
+          const pageMoveTargetLine =
+            state.visualMap[newCursor.visualLine]?.text ?? '';
+          newCursor.desiredCol = Math.min(
+            newStickyCol,
+            calculateVisualWidth(pageMoveTargetLine)
+          );
           break;
         }
       }
