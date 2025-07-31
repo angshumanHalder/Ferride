@@ -3,6 +3,7 @@ type Cursor = { visualLine: number; desiredCol: number };
 type LineInfo = {
   text: string;
   start_char_idx: number;
+  len_chars: number;
 };
 
 type EditResult = {

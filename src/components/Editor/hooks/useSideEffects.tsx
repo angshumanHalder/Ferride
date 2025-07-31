@@ -17,7 +17,7 @@ export function useSideEffects(
     if (containerRef.current) {
       containerRef.current.focus();
     }
-  }, [state.logicalLines, containerRef]);
+  }, [state.visualMap, containerRef]);
 
   useEffect(() => {
     const window = getCurrentWindow();

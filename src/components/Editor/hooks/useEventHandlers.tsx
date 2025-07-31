@@ -9,8 +9,9 @@ import {
 import {
   getCharIdxFromMousePosition,
   translateVisualToLogical,
-} from '../../utils';
+} from '../../../utils/utils';
 import { listen } from '@tauri-apps/api/event';
+import { applyLocalEdit } from '../../../utils/local-edits';
 
 export function useEventHandlers(
   stateRef: React.RefObject<EditorState>,
@@ -18,6 +19,7 @@ export function useEventHandlers(
   containerRef: React.RefObject<HTMLDivElement | null>
 ) {
   const isDraggingRef = useRef(false);
+  const latestRequestRef = useRef<number>(0);
 
   const handleSave = async () => {
     const currentState = stateRef.current;
@@ -36,6 +38,16 @@ export function useEventHandlers(
         });
       }
     }
+  };
+
+  const handleEdit = async (command: string, payload: InvokeArgs) => {
+    const result = await invoke<EditResult>(command, payload);
+    if (result)
+      dispatch({ type: EditorActionType.EditSuccess, payload: result });
+  };
+
+  const handleNavigate = (payload: any) => {
+    dispatch({ type: EditorActionType.Navigate, payload });
   };
 
   useEffect(() => {
@@ -174,171 +186,253 @@ export function useEventHandlers(
   }, []);
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const state = stateRef.current;
+    const currentState = stateRef.current;
     e.preventDefault();
-    const { key, ctrlKey, metaKey, shiftKey } = e;
 
-    const isEdit =
-      key.length === 1 ||
-      key === 'Enter' ||
-      key === 'Backspace' ||
-      key === 'Tab';
-    const isPrintableChar = isEdit && !ctrlKey && !metaKey;
-    const isUndo =
-      (ctrlKey || metaKey) && !shiftKey && key.toLowerCase() === 'z';
-    const isRedo =
-      (ctrlKey && key.toLowerCase() === 'y') ||
-      (metaKey && shiftKey && key.toLowerCase() === 'z');
-    const isVerticalNav = key === 'ArrowUp' || key === 'ArrowDown';
-    const isSelectAll = (ctrlKey || metaKey) && key.toLowerCase() === 'a';
-    const isCut = (ctrlKey || metaKey) && key.toLowerCase() === 'x';
-    const isCopy = (ctrlKey || metaKey) && key.toLowerCase() === 'c';
-    const isPaste = (ctrlKey || metaKey) && key.toLowerCase() === 'v';
-    const isSave = (ctrlKey || metaKey) && key.toLowerCase() === 's';
-    const isSaveAs =
-      (ctrlKey || metaKey) && shiftKey && key.toLowerCase() === 's';
-    const isOpenFile = (ctrlKey || metaKey) && key.toLowerCase() === 'o';
-    const isNewFile = (ctrlKey || metaKey) && key.toLowerCase() === 'n';
-    const isNavKey =
-      key.startsWith('Arrow') ||
-      key === 'Home' ||
-      key === 'End' ||
-      key === 'PageUp' ||
-      key === 'PageDown';
+    const keyMap: {
+      test: (e: any) => any;
+      handler: (e: any) => Promise<any> | void;
+    }[] = [
+      // File Operations
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n',
+        handler: () =>
+          handleNewFile(currentState.isDirty).then(
+            (res) => res && dispatch({ type: EditorActionType.ResetState })
+          ),
+      },
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o',
+        handler: () =>
+          handleOpenFile().then(
+            (res) =>
+              res &&
+              dispatch({
+                type: EditorActionType.SetInitialState,
+                payload: { ...res, width: currentState.editorWidth },
+              })
+          ),
+      },
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's',
+        handler: () =>
+          handleSaveFileAs().then(
+            (res) =>
+              res &&
+              dispatch({
+                type: EditorActionType.SaveSuccess,
+                payload: { path: res },
+              })
+          ),
+      },
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) &&
+          !e.shiftKey &&
+          e.key.toLowerCase() === 's',
+        handler: handleSave,
+      },
 
-    if (isNewFile) {
-      handleNewFile(state.isDirty).then((clearState) => {
-        if (clearState) {
-          dispatch({ type: EditorActionType.ResetState });
-        }
-      });
-    } else if (isOpenFile) {
-      handleOpenFile().then((result) => {
-        if (result)
+      // Meta Actions
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) &&
+          !e.shiftKey &&
+          e.key.toLowerCase() === 'z',
+        handler: () => handleEdit('undo', {}),
+      },
+      {
+        test: (e: any) =>
+          (e.ctrlKey && e.key.toLowerCase() === 'y') ||
+          (e.metaKey && e.shiftKey && e.key.toLowerCase() === 'z'),
+        handler: () => handleEdit('redo', {}),
+      },
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a',
+        handler: () => dispatch({ type: EditorActionType.SelectAll }),
+      },
+      {
+        test: (e: any) => e.key === 'Escape' && currentState.selection,
+        handler: () => dispatch({ type: EditorActionType.ClearSelection }),
+      },
+
+      // NAVIGATION
+      {
+        test: (e: any) =>
+          e.key.startsWith('Arrow') ||
+          ['Home', 'End', 'PageUp', 'PageDown'].includes(e.key),
+        handler: (e: any) => {
+          handleNavigate({
+            key: e.key,
+            shiftKey: e.shiftKey,
+            metaKey: e.metaKey,
+            ctrlKey: e.ctrlKey,
+          });
+        },
+      },
+
+      // CLIPBOARD
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) &&
+          e.key.toLowerCase() === 'c' &&
+          currentState.selection,
+        handler: () => {
+          const { anchor, head } = currentState.selection!;
+          invoke('copy_text', {
+            start: Math.min(anchor, head),
+            end: Math.max(anchor, head),
+          }).then(() => dispatch({ type: EditorActionType.ClearSelection }));
+        },
+      },
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) &&
+          e.key.toLowerCase() === 'x' &&
+          currentState.selection,
+        handler: () => {
+          const { anchor, head } = currentState.selection!;
+          handleEdit('cut_text', {
+            start: Math.min(anchor, head),
+            end: Math.max(anchor, head),
+          });
+        },
+      },
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v',
+        handler: () => {
+          const charIdx = translateVisualToLogical(
+            currentState.cursor,
+            currentState.visualMap,
+            currentState.logicalLines
+          );
+          const sel = currentState.selection;
+          const selRange = sel
+            ? [Math.min(sel.anchor, sel.head), Math.max(sel.anchor, sel.head)]
+            : null;
+          handleEdit('paste_text', { pos: charIdx, selection: selRange });
+        },
+      },
+
+      // EDITING
+      {
+        test: (e: any) =>
+          !e.ctrlKey &&
+          !e.metaKey &&
+          (e.key.length === 1 || ['Enter', 'Backspace', 'Tab'].includes(e.key)),
+        handler: (e: any) => {
+          const currentState = stateRef.current!;
+          const originalLines = currentState.logicalLines;
+
+          const charIdx = translateVisualToLogical(
+            currentState.cursor,
+            currentState.visualMap,
+            originalLines
+          );
+          const selRange = currentState.selection
+            ? [
+                Math.min(
+                  currentState.selection.anchor,
+                  currentState.selection.head
+                ),
+                Math.max(
+                  currentState.selection.anchor,
+                  currentState.selection.head
+                ),
+              ]
+            : null;
+
+          const textToInsert =
+            e.key === 'Enter'
+              ? '\n'
+              : e.key === 'Tab'
+                ? '\t'
+                : e.key === 'Backspace'
+                  ? ''
+                  : e.key;
+
+          const optimisticLines = applyLocalEdit(originalLines, {
+            pos: charIdx,
+            text: textToInsert,
+            selection: selRange,
+          });
+
+          let optimisticCursorPos = charIdx + textToInsert.length;
+          if (selRange) {
+            optimisticCursorPos = selRange[0] + textToInsert.length;
+          } else if (textToInsert === '') {
+            optimisticCursorPos = charIdx - 1;
+          }
+          if (optimisticCursorPos < 0) optimisticCursorPos = 0;
+
           dispatch({
-            type: EditorActionType.SetInitialState,
+            type: EditorActionType.OptimisticEdit,
             payload: {
-              lines: result.lines,
-              width: state.editorWidth,
-              path: result.path,
+              lines: optimisticLines,
+              newCursorPos: optimisticCursorPos,
             },
           });
-      });
-    }
-    if (isSaveAs) {
-      handleSaveFileAs().then((newPath) => {
-        if (newPath)
-          dispatch({
-            type: EditorActionType.SaveSuccess,
-            payload: { path: newPath },
-          });
-      });
-    } else if (isSave) {
-      e.preventDefault();
-      await handleSave();
-    } else if (isCopy && state.selection) {
-      const { anchor, head } = state.selection;
-      const start = Math.min(anchor, head);
-      const end = Math.max(anchor, head);
-      invoke('copy_text', { start, end }).then(() => {
-        dispatch({ type: EditorActionType.ClearSelection });
-      });
-    } else if (isCut && state.selection) {
-      const { anchor, head } = state.selection;
-      const start = Math.min(anchor, head);
-      const end = Math.max(anchor, head);
-      const result = await invoke<EditResult>('cut_text', { start, end });
-      if (result)
-        dispatch({ type: EditorActionType.EditSuccess, payload: result });
-    } else if (isPaste) {
-      const charIdx = translateVisualToLogical(
-        state.cursor,
-        state.visualMap,
-        state.logicalLines
-      );
-      const selectionRange = state.selection
-        ? [
-            Math.min(state.selection.anchor, state.selection.head),
-            Math.max(state.selection.anchor, state.selection.head),
-          ]
-        : null;
-      const result = await invoke<EditResult>('paste_text', {
-        pos: charIdx,
-        selection: selectionRange,
-      });
-      if (result)
-        dispatch({ type: EditorActionType.EditSuccess, payload: result });
-    }
 
-    if (isSelectAll) {
-      e.preventDefault();
-      dispatch({ type: EditorActionType.SelectAll });
-    }
+          const requestId = ++latestRequestRef.current;
 
-    if (!isVerticalNav) {
-      dispatch({ type: EditorActionType.ClearStickyColumn });
-    }
+          (async () => {
+            try {
+              let command: string;
+              let payload: InvokeArgs;
 
-    if (key === 'Escape' && state.selection) {
-      dispatch({ type: EditorActionType.ClearSelection });
-    }
+              switch (e.key) {
+                case 'Enter':
+                  command = 'insert_newline';
+                  payload = { pos: charIdx, selection: selRange };
+                  break;
+                case 'Backspace':
+                  command = 'delete_char';
+                  payload = { pos: charIdx, selection: selRange };
+                  break;
+                case 'Tab':
+                  command = 'insert_char';
+                  payload = { pos: charIdx, ch: '\t', selection: selRange };
+                  break;
+                default:
+                  command = 'insert_char';
+                  payload = { pos: charIdx, ch: e.key, selection: selRange };
+                  break;
+              }
 
-    if (isUndo) {
-      const result = await invoke<EditResult>('undo');
-      if (result)
-        dispatch({ type: EditorActionType.EditSuccess, payload: result });
-    } else if (isRedo) {
-      const result = await invoke<EditResult>('redo');
-      if (result)
-        dispatch({ type: EditorActionType.EditSuccess, payload: result });
-    } else if (isPrintableChar) {
-      let charIdx = translateVisualToLogical(
-        state.cursor,
-        state.visualMap,
-        state.logicalLines
-      );
-      let command: string;
-      let payload: InvokeArgs;
-
-      const selectionRange = state.selection
-        ? [
-            Math.min(state.selection.anchor, state.selection.head),
-            Math.max(state.selection.anchor, state.selection.head),
-          ]
-        : null;
-
-      switch (key) {
-        case 'Enter':
-          command = 'insert_newline';
-          payload = { pos: charIdx, selection: selectionRange };
-          break;
-        case 'Tab':
-          command = 'insert_char';
-          payload = { pos: charIdx, ch: '\t', selection: selectionRange };
-          break;
-        case 'Backspace':
-          command = 'delete_char';
-          payload = { pos: charIdx, selection: selectionRange };
-          break;
-        default:
-          command = 'insert_char';
-          payload = { pos: charIdx, ch: e.key, selection: selectionRange };
-      }
-
-      const result = await invoke<EditResult>(command, payload);
-      if (result)
-        dispatch({ type: EditorActionType.EditSuccess, payload: result });
-    } else if (isNavKey) {
-      // Navigation (FE only)
-      dispatch({
-        type: EditorActionType.Navigate,
-        payload: {
-          key: key as any,
-          shiftKey,
-          metaKey,
-          ctrlKey,
+              const newCursorPos = await invoke<number>(command, payload);
+              if (requestId === latestRequestRef.current) {
+                dispatch({
+                  type: EditorActionType.SyncSuccess,
+                  payload: { cursor_pos: newCursorPos },
+                });
+              }
+            } catch (error) {
+              console.error('Backend update failed, rolling back:', error);
+              if (requestId === latestRequestRef.current) {
+                dispatch({
+                  type: EditorActionType.Rollback,
+                  payload: { lines: originalLines },
+                });
+              }
+            }
+          })();
         },
-      });
+      },
+    ];
+
+    for (const binding of keyMap) {
+      if (binding.test(e)) {
+        const handlerResult = binding.handler(e);
+        if (handlerResult instanceof Promise) {
+          await handlerResult;
+        }
+        break;
+      }
     }
   };
 

@@ -1,5 +1,5 @@
-import "../../App.css";
-import { getCharIdxFromCol, renderTextWithTabs } from "../utils";
+import '../../App.css';
+import { getCharIdxFromCol, renderTextWithTabs } from '../../utils/utils.ts';
 
 interface EditorLineProps {
   line: VisualLine;
@@ -23,7 +23,7 @@ export function EditorLine({
     if (!logicalLine) return <div className="editor-line">{line.text}</div>;
 
     const lineStartIdx = logicalLine.start_char_idx + line.startCharOffset;
-    const lineEndIdx = lineStartIdx + line.text.length;
+    const lineEndIdx = lineStartIdx + logicalLine.len_chars;
 
     if (lineEndIdx < selectionStart || lineStartIdx >= selectionEnd) {
       return <>{renderTextWithTabs(line.text)}</>;
@@ -60,5 +60,4 @@ export function EditorLine({
   }
 
   return <>{renderTextWithTabs(line.text)}</>;
-
 }

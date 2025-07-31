@@ -21,6 +21,7 @@ pub struct EditorState {
 pub struct LineInfo {
     pub text: String,
     pub start_char_idx: usize,
+    pub len_chars: usize,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -62,6 +63,7 @@ impl EditorState {
             lines_info.push(LineInfo {
                 text: line_content.to_string(),
                 start_char_idx: current_char_idx,
+                len_chars: line.len_chars(),
             });
             current_char_idx += line.len_chars();
         }

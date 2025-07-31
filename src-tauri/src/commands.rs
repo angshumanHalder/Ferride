@@ -60,7 +60,7 @@ pub fn insert_newline(
     pos: usize,
     selection: Option<(usize, usize)>,
     state: tauri::State<EditorState>,
-) -> Result<EditResult, String> {
+) -> Result<usize, String> {
     let mut doc = state.document.lock().unwrap();
     let mut undo_stack = state.undo_stack.lock().unwrap();
 
@@ -89,10 +89,7 @@ pub fn insert_newline(
 
     mem::drop(doc);
 
-    Ok(EditResult {
-        lines: state.get_rendered_text(),
-        cursor_pos: new_cursor_pos,
-    })
+    Ok(new_cursor_pos)
 }
 
 #[tauri::command]
@@ -101,7 +98,7 @@ pub fn insert_char(
     ch: char,
     selection: Option<(usize, usize)>,
     state: tauri::State<EditorState>,
-) -> Result<EditResult, String> {
+) -> Result<usize, String> {
     let mut doc = state.document.lock().unwrap();
     let mut undo_stack = state.undo_stack.lock().unwrap();
 
@@ -128,10 +125,7 @@ pub fn insert_char(
     state.redo_stack.lock().unwrap().clear();
     mem::drop(doc);
 
-    Ok(EditResult {
-        lines: state.get_rendered_text(),
-        cursor_pos: new_cursor_pos,
-    })
+    Ok(new_cursor_pos)
 }
 
 #[tauri::command]
@@ -139,27 +133,27 @@ pub fn delete_char(
     pos: usize,
     selection: Option<(usize, usize)>,
     state: tauri::State<EditorState>,
-) -> Result<EditResult, String> {
+) -> Result<usize, String> {
     let mut doc = state.document.lock().unwrap();
     let mut undo_stack = state.undo_stack.lock().unwrap();
     let new_cursor_pos;
 
     if let Some((start, end)) = selection {
-        let deleted_text = doc.slice(start..end).to_string();
-        doc.remove(start..end);
-        undo_stack.push(EditAction::Insert {
-            pos: start,
-            text: deleted_text,
-        });
-        new_cursor_pos = start;
-    } else if pos > 0 {
-        let delete_pos = pos.saturating_sub(1);
-        if delete_pos >= doc.len_chars() {
-            return Ok(EditResult {
-                lines: state.get_rendered_text(),
-                cursor_pos: doc.len_chars(),
+        let doc_len = doc.len_chars();
+        let start_clamped = start.min(doc_len);
+        let end_clamped = end.min(doc_len);
+
+        if start_clamped < end_clamped {
+            let deleted_text = doc.slice(start_clamped..end_clamped).to_string();
+            doc.remove(start_clamped..end_clamped);
+            undo_stack.push(EditAction::Insert {
+                pos: start_clamped,
+                text: deleted_text,
             });
         }
+        new_cursor_pos = start_clamped;
+    } else if pos > 0 {
+        let delete_pos = pos.saturating_sub(1);
         let deleted_text = doc.slice(delete_pos..pos).to_string();
         doc.remove(delete_pos..pos);
         undo_stack.push(EditAction::Insert {
@@ -175,10 +169,7 @@ pub fn delete_char(
 
     mem::drop(doc);
 
-    Ok(EditResult {
-        lines: state.get_rendered_text(),
-        cursor_pos: new_cursor_pos,
-    })
+    Ok(new_cursor_pos)
 }
 
 #[tauri::command]
@@ -267,22 +258,29 @@ pub fn cut_text(
     state: tauri::State<EditorState>,
 ) -> Result<EditResult, String> {
     let mut doc = state.document.lock().unwrap();
-    let text_to_cut = doc.slice(start..end).to_string();
 
-    let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
-    clipboard
-        .set_text(text_to_cut.clone())
-        .map_err(|e| e.to_string())?;
+    let doc_len = doc.len_chars();
+    let start_clamped = start.min(doc_len);
+    let end_clamped = end.min(doc_len);
 
-    doc.remove(start..end);
+    if start_clamped < end_clamped {
+        let text_to_cut = doc.slice(start_clamped..end_clamped).to_string();
+        let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
+        clipboard
+            .set_text(text_to_cut.clone())
+            .map_err(|e| e.to_string())?;
 
-    state.undo_stack.lock().unwrap().push(EditAction::Insert {
-        pos: start,
-        text: text_to_cut,
-    });
+        doc.remove(start..end);
+
+        state.undo_stack.lock().unwrap().push(EditAction::Insert {
+            pos: start_clamped,
+            text: text_to_cut,
+        });
+    }
+
     state.redo_stack.lock().unwrap().clear();
 
-    let new_cursor_pos = start;
+    let new_cursor_pos = start_clamped;
 
     mem::drop(doc);
 

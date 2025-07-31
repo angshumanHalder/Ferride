@@ -3,7 +3,7 @@ import {
   calculateVisualWidth,
   translateLogicalToVisual,
   translateVisualToLogical,
-} from '../../utils';
+} from '../../../utils/utils';
 
 export interface EditorState {
   logicalLines: LineInfo[];
@@ -29,6 +29,9 @@ export enum EditorActionType {
   ClearStickyColumn = 'CLEAR_STICKY_COLUMN',
   SelectAll = 'SELECT_ALL',
   SaveSuccess = 'SAVE_SUCCESS',
+  OptimisticEdit = 'OPTIMISTIC_EDIT',
+  SyncSuccess = 'SYNC_SUCCESS',
+  Rollback = 'ROLLBACK',
 }
 
 export const initialState: EditorState = {
@@ -77,7 +80,13 @@ export type EditorAction =
   | { type: EditorActionType.ClearSelection }
   | { type: EditorActionType.ClearStickyColumn }
   | { type: EditorActionType.SelectAll }
-  | { type: EditorActionType.SaveSuccess; payload: { path: string } };
+  | { type: EditorActionType.SaveSuccess; payload: { path: string } }
+  | {
+      type: EditorActionType.OptimisticEdit;
+      payload: { lines: LineInfo[]; newCursorPos: number };
+    }
+  | { type: EditorActionType.SyncSuccess; payload: { cursor_pos: number } }
+  | { type: EditorActionType.Rollback; payload: { lines: LineInfo[] } };
 
 export function editorReducer(
   state: EditorState,
@@ -88,7 +97,7 @@ export function editorReducer(
       const { lines, width, path } = action.payload;
       const newVisualMap = buildVisualMap(lines, width);
       return {
-        ...state,
+        ...initialState,
         logicalLines: lines,
         editorWidth: width,
         visualMap: newVisualMap,
@@ -314,6 +323,38 @@ export function editorReducer(
         currentPath: action.payload.path,
       };
 
+    case EditorActionType.OptimisticEdit: {
+      const { lines, newCursorPos } = action.payload;
+      const newVisualMap = buildVisualMap(lines, state.editorWidth);
+      const optimisticCursor = translateLogicalToVisual(
+        newCursorPos,
+        newVisualMap,
+        lines
+      );
+      return {
+        ...state,
+        cursor: optimisticCursor,
+        logicalLines: lines,
+        visualMap: newVisualMap,
+        isDirty: true,
+        selection: null,
+        stickyCol: null,
+      };
+    }
+    case EditorActionType.SyncSuccess: {
+      const newCursor = translateLogicalToVisual(
+        action.payload.cursor_pos,
+        state.visualMap,
+        state.logicalLines
+      );
+
+      return { ...state, cursor: newCursor, selection: null, stickyCol: null };
+    }
+    case EditorActionType.Rollback: {
+      const { lines } = action.payload;
+      const newVisualMap = buildVisualMap(lines, state.editorWidth);
+      return { ...state, logicalLines: lines, visualMap: newVisualMap };
+    }
     default:
       return state;
   }
