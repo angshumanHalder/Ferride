@@ -330,3 +330,95 @@ pub fn paste_text(
         cursor_pos: new_cursor_pos,
     })
 }
+
+#[tauri::command]
+pub fn find_next(
+    query: String,
+    from: usize,
+    state: tauri::State<EditorState>,
+) -> Result<Option<(usize, usize)>, String> {
+    let doc = state.document.lock().unwrap();
+    let doc_slice = doc.slice(..);
+
+    if let Some(start_byte) = doc_slice
+        .to_string()
+        .get(from..)
+        .and_then(|s| s.find(&query))
+    {
+        let char_start = doc.byte_to_char(from + start_byte);
+        let char_end = char_start + query.chars().count();
+        Ok(Some((char_start, char_end)))
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+pub fn replace_next(
+    start: usize,
+    end: usize,
+    replace_with: String,
+    state: tauri::State<EditorState>,
+) -> Result<EditResult, String> {
+    let mut doc = state.document.lock().unwrap();
+    let mut undo_stack = state.undo_stack.lock().unwrap();
+
+    let original_text = doc.slice(start..end).to_string();
+    doc.remove(start..end);
+    doc.insert(start, &replace_with);
+
+    undo_stack.push(EditAction::Insert {
+        pos: start,
+        text: original_text,
+    });
+    undo_stack.push(EditAction::Delete {
+        pos: start,
+        text: replace_with.clone(),
+    });
+
+    state.redo_stack.lock().unwrap().clear();
+
+    let new_cursor_pos = start + replace_with.chars().count();
+
+    mem::drop(doc);
+
+    Ok(EditResult {
+        lines: state.get_rendered_text(),
+        cursor_pos: new_cursor_pos,
+    })
+}
+
+#[tauri::command]
+pub fn replace_all(
+    query: String,
+    replace_with: String,
+    state: tauri::State<EditorState>,
+) -> Result<EditResult, String> {
+    let mut doc = state.document.lock().unwrap();
+    let mut undo_stack = state.undo_stack.lock().unwrap();
+
+    let full_text = doc.to_string();
+    // Absolute dog shit way to replace it.
+    // But I'm lazy and bored of the project.
+    // So it is what it is.
+    let new_text = full_text.replace(&query, &replace_with);
+
+    let original_full_text = doc.to_string();
+    doc.remove(..);
+    doc.insert(0, &new_text);
+
+    undo_stack.push(EditAction::Insert {
+        pos: 0,
+        text: original_full_text,
+    });
+    undo_stack.push(EditAction::Delete {
+        pos: 0,
+        text: new_text,
+    });
+    mem::drop(doc);
+
+    Ok(EditResult {
+        lines: state.get_rendered_text(),
+        cursor_pos: 0,
+    })
+}

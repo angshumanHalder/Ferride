@@ -7,10 +7,8 @@
   --selection-background-color: #0078d4;
   --selection-text-color: #ffffff;
 
-
   --statusbar-background-color: #e0e0e0;
   --statusbar-text-color: #0f0f0f;
-
 
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 16px;
@@ -30,7 +28,6 @@
   :root {
     --background-color: #1e1e1e;
     --text-color: #cccccc;
-
 
     --editor-background-color: #1e1e1e;
     --cursor-color: #cccccc;
@@ -117,4 +114,52 @@ body,
 
 .statusbar-item {
   margin: 0 10px;
+}
+
+.searchbar-container {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: var(--statusbar-background-color);
+  border-top: 1px solid var(--background-color);
+  border-bottom: 1px solid var(--background-color);
+}
+
+.searchbar-container input[type='text'] {
+  flex-grow: 1;
+  margin-right: 8px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--background-color);
+  background-color: var(--editor-background-color);
+  color: var(--text-color);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.searchbar-container input[type='text']:focus {
+  outline: 1px solid var(--selection-background-color);
+}
+
+.searchbar-container button {
+  padding: 2px 8px;
+  margin-left: 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background-color: #555555;
+  color: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.searchbar-container button:hover {
+  background-color: #666666;
+}
+
+.searchbar-container button:last-child {
+  margin-left: 12px;
+  background-color: transparent;
+  font-weight: bold;
+  font-size: 16px;
+  padding: 0 8px;
 }

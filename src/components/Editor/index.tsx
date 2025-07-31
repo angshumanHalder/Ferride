@@ -2,6 +2,7 @@ import { StatuBar } from '../StatusBar';
 import { useEditorHook } from './hooks/hook.tsx';
 import '../../App.css';
 import { EditorLine } from '../EditorLine';
+import { SearchBar } from '../Searchbar/index.tsx';
 
 export function Editor() {
   const {
@@ -16,6 +17,13 @@ export function Editor() {
     handleMouseUp,
     currentPath,
     isDirty,
+    isSearchVisible,
+    handleFindNext,
+    handleReplaceAll,
+    handleReplaceNext,
+    handleReplaceQuery,
+    handleSearchQuery,
+    handleToggleSearch,
   } = useEditorHook();
 
   return (
@@ -47,6 +55,16 @@ export function Editor() {
           </div>
         )}
       </div>
+      {isSearchVisible && (
+        <SearchBar
+          onClose={() => handleToggleSearch()}
+          onFindNext={handleFindNext}
+          onReplace={handleReplaceNext}
+          onReplaceAll={handleReplaceAll}
+          setReplaceQuery={handleReplaceQuery}
+          setSearchQuery={handleSearchQuery}
+        />
+      )}
       <StatuBar
         cursorLine={cursor.visualLine}
         cursorCol={cursor.desiredCol}

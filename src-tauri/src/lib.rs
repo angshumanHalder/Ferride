@@ -116,6 +116,9 @@ pub fn run() {
             commands::copy_text,
             commands::cut_text,
             commands::paste_text,
+            commands::find_next,
+            commands::replace_next,
+            commands::replace_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

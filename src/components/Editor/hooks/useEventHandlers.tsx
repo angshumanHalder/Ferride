@@ -322,6 +322,11 @@ export function useEventHandlers(
       // EDITING
       {
         test: (e: any) =>
+          (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f',
+        handler: () => dispatch({ type: EditorActionType.ToggleSearch }),
+      },
+      {
+        test: (e: any) =>
           !e.ctrlKey &&
           !e.metaKey &&
           (e.key.length === 1 || ['Enter', 'Backspace', 'Tab'].includes(e.key)),

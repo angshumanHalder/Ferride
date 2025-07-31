@@ -14,6 +14,9 @@ export interface EditorState {
   selection: { anchor: number; head: number } | null;
   stickyCol: number | null;
   currentPath: string | null;
+  isSearchVisible: boolean;
+  searchQuery: string;
+  replaceQuery: string;
 }
 
 export enum EditorActionType {
@@ -32,6 +35,9 @@ export enum EditorActionType {
   OptimisticEdit = 'OPTIMISTIC_EDIT',
   SyncSuccess = 'SYNC_SUCCESS',
   Rollback = 'ROLLBACK',
+  ToggleSearch = 'TOGGLE_SEARCH',
+  SetSearchQuery = 'SET_SEARCH_QUERY',
+  SetReplaceQuery = 'SET_REPLACE_QUERY',
 }
 
 export const initialState: EditorState = {
@@ -43,6 +49,9 @@ export const initialState: EditorState = {
   selection: null,
   stickyCol: null,
   currentPath: null,
+  isSearchVisible: false,
+  searchQuery: '',
+  replaceQuery: '',
 };
 
 export type EditorAction =
@@ -86,7 +95,10 @@ export type EditorAction =
       payload: { lines: LineInfo[]; newCursorPos: number };
     }
   | { type: EditorActionType.SyncSuccess; payload: { cursor_pos: number } }
-  | { type: EditorActionType.Rollback; payload: { lines: LineInfo[] } };
+  | { type: EditorActionType.Rollback; payload: { lines: LineInfo[] } }
+  | { type: EditorActionType.ToggleSearch }
+  | { type: EditorActionType.SetSearchQuery; payload: string }
+  | { type: EditorActionType.SetReplaceQuery; payload: string };
 
 export function editorReducer(
   state: EditorState,
@@ -355,6 +367,13 @@ export function editorReducer(
       const newVisualMap = buildVisualMap(lines, state.editorWidth);
       return { ...state, logicalLines: lines, visualMap: newVisualMap };
     }
+
+    case EditorActionType.ToggleSearch:
+      return { ...state, isSearchVisible: !state.isSearchVisible };
+    case EditorActionType.SetSearchQuery:
+      return { ...state, searchQuery: action.payload };
+    case EditorActionType.SetReplaceQuery:
+      return { ...state, replaceQuery: action.payload };
     default:
       return state;
   }
