@@ -12,6 +12,7 @@ import {
 } from '../../../utils/utils';
 import { listen } from '@tauri-apps/api/event';
 import { applyLocalEdit } from '../../../utils/local-edits';
+import { exit } from '@tauri-apps/plugin-process';
 
 export function useEventHandlers(
   stateRef: React.RefObject<EditorState>,
@@ -193,6 +194,13 @@ export function useEventHandlers(
       test: (e: any) => any;
       handler: (e: any) => Promise<any> | void;
     }[] = [
+      {
+        test: (e: any) =>
+          (e.ctrlKey || e.metaKey) && e.key.toLowerCase() == 'q',
+        handler: async () => {
+          await exit(0);
+        },
+      },
       // File Operations
       {
         test: (e: any) =>
