@@ -4,12 +4,14 @@ import { useSideEffects } from './useSideEffects';
 import { useEventHandlers } from './useEventHandlers';
 import { invoke } from '@tauri-apps/api/core';
 import { EditorActionType } from './reducer';
+import { FixedSizeList } from 'react-window';
 
 export function useEditorHook() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { state, dispatch } = useEditorState();
 
-  const stateRef = useSideEffects(state, containerRef);
+  const listRef = useRef<FixedSizeList>(null);
+  const stateRef = useSideEffects(state, containerRef, listRef);
 
   const eventHandlers = useEventHandlers(stateRef, dispatch, containerRef);
 
@@ -86,5 +88,6 @@ export function useEditorHook() {
     handleReplaceQuery,
     handleSearchQuery,
     handleToggleSearch,
+    listRef,
   };
 }
