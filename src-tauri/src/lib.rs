@@ -41,6 +41,7 @@ pub fn run() {
                 true,
                 Some("cmdOrCtrl+A"),
             )?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, Some("cmdOrCtrl+Q"))?;
 
             #[cfg(target_os = "macos")]
             let redo_item = MenuItem::with_id(app, "edit-redo", "Redo", true, Some("cmd+shift+z"))?;
@@ -69,7 +70,7 @@ pub fn run() {
                     let app_menu = SubmenuBuilder::new(app, &app.package_info().name)
                         .about(None)
                         .separator()
-                        .quit()
+                        .item(&quit_item)
                         .build()?;
 
                     let file_menu = file_menu_builder.build()?;
@@ -81,10 +82,7 @@ pub fn run() {
 
                 #[cfg(not(target_os = "macos"))]
                 {
-                    let file_menu = file_menu_builder
-                        .separator()
-                        .item(&PredefinedMenuItem::quit(&handle, Some("Exit"))?) // Use "Exit" label
-                        .build()?;
+                    let file_menu = file_menu_builder.separator().item(&quit_item).build()?;
 
                     MenuBuilder::new(&handle)
                         .items(&[&file_menu, &edit_menu])?
@@ -97,12 +95,17 @@ pub fn run() {
 
             app.on_menu_event(move |app_handle: &tauri::AppHandle, event| {
                 let event_id = event.id().0.as_str();
-                app_handle.emit("menu-event", event_id).unwrap();
+                if event_id == "quit" {
+                    app_handle.exit(0);
+                } else {
+                    app_handle.emit("menu-event", event_id).unwrap();
+                }
             });
             Ok(())
         })
         .manage(state)
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             commands::new_file,
             commands::open_file,

@@ -18,7 +18,10 @@ export function SearchBar({
   setReplaceQuery,
 }: SearchBarProps) {
   return (
-    <div className="searchbar-container">
+    <div
+      className="searchbar-container"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <input
         type="text"
         placeholder="Find"

@@ -64,6 +64,7 @@ export function Editor() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onSelect={(e) => e.preventDefault()}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <AutoSizer>
           {({ height, width }) => (

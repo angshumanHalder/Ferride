@@ -23,7 +23,10 @@ export function StatuBar({
   }
 
   return (
-    <div className="statusbar-container">
+    <div
+      className="statusbar-container"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div className="statusbar-item">
         Ln {cursorLine + 1}, Col {cursorCol + 1}
       </div>
