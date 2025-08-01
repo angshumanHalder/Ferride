@@ -1,11 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import { RefObject, useEffect, useRef } from 'react';
 import { EditorState } from './reducer';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { confirm } from '@tauri-apps/plugin-dialog';
+import { FixedSizeList } from 'react-window';
 
 export function useSideEffects(
   state: EditorState,
-  containerRef: React.RefObject<HTMLDivElement | null>
+  containerRef: RefObject<HTMLDivElement | null>,
+  listRef: RefObject<FixedSizeList | null>
 ) {
   const stateRef = useRef(state);
 
@@ -43,18 +45,9 @@ export function useSideEffects(
   }, []);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-
-    const lineEl = containerRef.current.querySelector(
-      `[data-line-index="${state.cursor.visualLine}"]`
-    );
-    if (lineEl) {
-      lineEl.scrollIntoView({
-        block: 'nearest',
-        inline: 'nearest',
-      });
-    }
-  }, [state.cursor, containerRef]);
+    if (!listRef.current) return;
+    listRef.current.scrollToItem(state.cursor.visualLine, 'auto');
+  }, [state.cursor, listRef]);
 
   return stateRef;
 }
