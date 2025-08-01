@@ -66,21 +66,21 @@ body,
   user-select: none;
 }
 
-.editor-container::-webkit-scrollbar {
+.editor-scrollbar::-webkit-scrollbar {
   width: 8px;
 }
 
-.editor-container::-webkit-scrollbar-track {
+.editor-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.editor-container::-webkit-scrollbar-thumb {
+.editor-scrollbar::-webkit-scrollbar-thumb {
   background-color: #555;
   border-radius: 10px;
   border: 2px solid var(--editor-background-color);
 }
 
-.editor-container::-webkit-scrollbar-thumb:hover {
+.editor-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #777;
 }
 
